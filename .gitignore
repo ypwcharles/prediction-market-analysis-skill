@@ -1,0 +1,7 @@
+.DS_Store
+prediction-market-analysis-workspace/
+review-feedback/
+benchmark.json
+benchmark.md
+*.pyc
+__pycache__/

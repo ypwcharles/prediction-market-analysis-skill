@@ -1,0 +1,50 @@
+{
+  "skill_name": "prediction-market-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Analyze this specific Polymarket market and tell me whether there is a trade after fees and slippage. Use my current portfolio exposure if relevant.",
+      "expected_output": "A structured single-market report with explicit TRADE or NO TRADE verdict, market summary, probability interval, evidence review, net edge after costs, portfolio impact, conservative Kelly sizing, and kill criteria.",
+      "files": [],
+      "assertions": [
+        "Output includes an explicit TRADE or NO TRADE verdict.",
+        "Output includes both a main probability and a confidence interval.",
+        "Output evaluates net edge after fees and slippage.",
+        "Output includes portfolio-aware reasoning."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Search Polymarket and Kalshi for markets related to the next Fed decision. Rank the strongest setups and reject weak ones.",
+      "expected_output": "A shortlist of candidate markets followed by full detailed reports only for markets that survive screening. Weak markets should be rejected clearly.",
+      "files": [],
+      "assertions": [
+        "Output includes a ranked shortlist when multiple markets are discovered.",
+        "Output does not force a trade on weak or low-information markets.",
+        "Output distinguishes market screening from full analysis."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "This market looks attractive, but my portfolio already has similar crypto exposure. Re-evaluate whether I should trade it.",
+      "expected_output": "A portfolio-aware re-evaluation that may reduce sizing or refuse the trade if concentration risk is too high.",
+      "files": [],
+      "assertions": [
+        "Output reasons about overlap with existing thematic exposure.",
+        "Output can return NO TRADE because of concentration risk.",
+        "Sizing is reduced or refused rather than blindly repeated."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Compare this Kalshi contract with the corresponding Polymarket contract and decide whether there is a real opportunity after execution costs.",
+      "expected_output": "A cross-market comparison that checks whether price differences survive fees, slippage, and execution uncertainty.",
+      "files": [],
+      "assertions": [
+        "Output compares related contracts across platforms.",
+        "Output checks executable rather than theoretical edge.",
+        "Output rejects fake arbitrage that disappears after costs."
+      ]
+    }
+  ]
+}
