@@ -3,47 +3,50 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Analyze this specific Polymarket market and tell me whether there is a trade after fees and slippage. Use my current portfolio exposure if relevant.",
-      "expected_output": "A structured single-market report with explicit TRADE or NO TRADE verdict, market summary, probability interval, evidence review, net edge after costs, portfolio impact, conservative Kelly sizing, and kill criteria.",
+      "prompt": "分析这两个市场哪个更适合表达同一个 thesis：'US forces enter Iran by March 31?' 和 'US forces enter Iran by April 30?'。我的方向判断是美国大概率会进入伊朗，但具体日期不确定。请按 skill 的标准给出 verdict、best expression、if thesis is right but late 和 sizing 建议。",
+      "expected_output": "The analysis separates direction from timing, identifies this as a time-bucket or cross-bucket trade, prefers the cleaner bucket expression over the tighter clock, and explicitly explains what happens if the thesis is right but late.",
       "files": [],
-      "assertions": [
-        "Output includes an explicit TRADE or NO TRADE verdict.",
-        "Output includes both a main probability and a confidence interval.",
-        "Output evaluates net edge after fees and slippage.",
-        "Output includes portfolio-aware reasoning."
+      "expectations": [
+        "The output identifies a trade archetype.",
+        "The output explicitly compares the asked bucket with an adjacent bucket.",
+        "The output includes 'best expression' and 'if thesis is right but late'.",
+        "The output does not treat broad directional conviction as full support for the earlier bucket."
       ]
     },
     {
       "id": 2,
-      "prompt": "Search Polymarket and Kalshi for markets related to the next Fed decision. Rank the strongest setups and reject weak ones.",
-      "expected_output": "A shortlist of candidate markets followed by full detailed reports only for markets that survive screening. Weak markets should be rejected clearly.",
+      "prompt": "有个市场我在 0.95 买 Yes，因为现实世界里结果已经出来了，只是 Polymarket 还没结算。请判断这是不是值得参与，并按同样模板分析。",
+      "expected_output": "The analysis recognizes a resolution arb, shifts focus from event forecasting to rule text and settlement confidence, and sizes with operational and lock-up risk rather than ordinary directional Kelly logic.",
       "files": [],
-      "assertions": [
-        "Output includes a ranked shortlist when multiple markets are discovered.",
-        "Output does not force a trade on weak or low-information markets.",
-        "Output distinguishes market screening from full analysis."
+      "expectations": [
+        "The output labels the trade as 'resolution arb'.",
+        "The evidence review focuses on rules, resolution source, or settlement mechanics.",
+        "The analysis does not frame the position as a normal directional prediction trade.",
+        "The sizing section mentions operational, lock-up, or resolution risk."
       ]
     },
     {
       "id": 3,
-      "prompt": "This market looks attractive, but my portfolio already has similar crypto exposure. Re-evaluate whether I should trade it.",
-      "expected_output": "A portfolio-aware re-evaluation that may reduce sizing or refuse the trade if concentration risk is too high.",
+      "prompt": "我已经持有多笔伊朗-美国-原油相关仓位。现在又看到两个市场：'US x Iran ceasefire by April 30?' 和 'Iran x Israel/US conflict ends by April 15?'。请分析是否还能加仓，以及哪一个表达更好。",
+      "expected_output": "The analysis identifies thematic concentration, distinguishes related but non-identical rules, evaluates the cleaner contract expression, and applies concentration and correlation haircuts rather than treating them as independent bets.",
       "files": [],
-      "assertions": [
-        "Output reasons about overlap with existing thematic exposure.",
-        "Output can return NO TRADE because of concentration risk.",
-        "Sizing is reduced or refused rather than blindly repeated."
+      "expectations": [
+        "The output compares rule differences between the two markets.",
+        "The portfolio section flags same-thesis or thematic concentration.",
+        "The sizing section applies correlation or concentration discipline.",
+        "The final recommendation names which expression is cleaner or says not to add."
       ]
     },
     {
       "id": 4,
-      "prompt": "Compare this Kalshi contract with the corresponding Polymarket contract and decide whether there is a real opportunity after execution costs.",
-      "expected_output": "A cross-market comparison that checks whether price differences survive fees, slippage, and execution uncertainty.",
+      "prompt": "比较这两个相关但不完全相同的市场：'US x Iran ceasefire by April 30?' 和 'Iran x Israel/US conflict ends by April 15?'。我真正的 thesis 只是“局势可能缓和”，但我不确定应该买哪一个。请严格按模板输出，并明确说明这是不是纯时间桶比较，还是规则口径比较。",
+      "expected_output": "The analysis recognizes that the comparison is not only about timing, explicitly audits rule-scope differences, and uses the exact numbered template instead of collapsing into custom headings.",
       "files": [],
-      "assertions": [
-        "Output compares related contracts across platforms.",
-        "Output checks executable rather than theoretical edge.",
-        "Output rejects fake arbitrage that disappears after costs."
+      "expectations": [
+        "The output uses the eight numbered sections.",
+        "The output explicitly states whether the problem is timing, rule-scope, or both.",
+        "The output names the rule-scope differences between the two contracts.",
+        "The output does not treat the pair as a pure time-bucket ladder."
       ]
     }
   ]

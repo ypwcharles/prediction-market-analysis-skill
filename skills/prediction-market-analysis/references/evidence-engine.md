@@ -4,6 +4,12 @@
 
 This reference defines how to decide whether information should change the probability estimate at all. The goal is not to collect the largest pile of evidence. The goal is to isolate the smallest set of high-impact, resolution-relevant facts.
 
+It also defines how to tell apart:
+
+- evidence that changes direction
+- evidence that changes timing
+- evidence that changes resolution confidence
+
 ## Source Tiers
 
 ### L1: Primary / Resolution-Relevant Sources
@@ -55,6 +61,62 @@ Treat as weak by default:
 - screenshots without provenance
 - AI summaries with no original sourcing
 
+## Archetype-Specific Evidence Tests
+
+### Resolution Arb
+
+Ask:
+
+1. Has the real-world state already crossed the practical finish line?
+2. Do the written rules still clearly map that state to the expected outcome?
+3. Is there any material oracle, admin, or interpretation risk left?
+4. Is the remaining uncertainty about reality, or only about settlement mechanics?
+
+The decisive evidence is usually the combination of rule text plus a primary source showing the underlying state is already settled in substance.
+
+### Directional Event
+
+Ask:
+
+1. Does this evidence change whether the event happens at all?
+2. Is it causal, or just narrative?
+3. Has the market likely already absorbed it?
+
+### Time-Bucket Trade
+
+Ask:
+
+1. Does this evidence change when the event happens, not merely whether it happens?
+2. Does it speak to a hard calendar, procedural gate, or operational bottleneck?
+3. Would this still matter if the deadline moved back by a month?
+
+If the answer to the third question is yes, it may be direction evidence rather than timing evidence.
+
+### Cross-Bucket Structure
+
+Ask:
+
+1. Which evidence differentiates the nearby buckets from each other?
+2. What exactly makes the early bucket miss while the later bucket still works?
+3. Is the market paying for precision, or for genuinely different states of the world?
+4. Are the contracts actually describing the same event, or only a related event family?
+5. Could the same real-world facts make one resolve `Yes` and the other `No`?
+
+If the answer to 4 or 5 is yes, this is not a pure timing comparison. It is also a rule-scope comparison.
+In that case, the final analysis should describe the setup as `cross-bucket structure` or equivalent cross-expression language, not as a pure time-bucket trade.
+
+## Rule-Scope Differences
+
+When adjacent contracts differ by language, explicitly compare:
+
+- named actors or countries
+- verbs like `ceasefire`, `conflict ends`, `approval`, `launch`, `enter`, `ban`
+- formal declaration requirements versus practical reality
+- broad conflict conditions versus bilateral conditions
+- whether one market requires a narrower legal or operational threshold
+
+Do not let a looser or broader real-world thesis override a narrower written contract.
+
 ## Scoring Dimensions
 
 Score each evidence item on:
@@ -67,6 +129,9 @@ Score each evidence item on:
 - `impact_on_resolution`
 
 Do not allow low-impact evidence to dominate just because it is recent or widely repeated.
+
+For time-bucket trades, score `directness_to_settlement` and `impact_on_resolution` against the specific deadline, not the broad event.
+For rule-scope comparisons, score those dimensions against the written contract language, not your shorthand thesis.
 
 ## Deduplication Rules
 
@@ -91,6 +156,30 @@ When evidence conflicts:
 
 If conflict survives these filters, widen the interval. If the conflict is central to the thesis, reject the trade.
 
+When two related markets seem to disagree, first check whether the disagreement is genuine conflict or simply different settlement language.
+
+## Timing Evidence vs Direction Evidence
+
+Treat the following as direction-heavy but timing-weak unless paired with a deadline mechanism:
+
+- "talks are progressing"
+- "approval is likely"
+- "momentum is building"
+- "market sentiment is shifting"
+- "participants expect action soon"
+
+Treat the following as timing-relevant when verified:
+
+- statutory or regulatory deadlines
+- court calendars and filing schedules
+- product launch windows with locked prerequisites
+- weather models tied to the resolution location and date
+- known logistics, settlement, or delivery constraints
+- official statements that narrow timing rather than merely tone
+
+An event becoming more likely eventually is not enough to justify buying a narrow `Yes` bucket.
+And a broad thesis becoming more likely is not enough to justify buying a narrower rule-scope contract.
+
 ## What Should Move Probability
 
 Probability should move only when the evidence:
@@ -102,6 +191,8 @@ Probability should move only when the evidence:
 
 Information can be true and still fail this test.
 
+For time-bucket trades, probability should move only when the evidence changes the deadline-sensitive path, not just the eventual outcome.
+
 ## When Evidence Is Too Weak To Proceed
 
 Return `NO TRADE` if:
@@ -110,6 +201,9 @@ Return `NO TRADE` if:
 - the decisive evidence cannot be verified
 - the strongest evidence points in opposite directions and cannot be resolved
 - the key supporting claim depends on ambiguous interpretation
+- the thesis depends on timing precision but the supporting evidence mostly changes direction only
+- the setup is a supposed resolution arb but still depends on debatable rule interpretation
+- the trade thesis is broader than the actual contract language and no rule-scope adjustment has been made
 
 ## Practical Heuristic
 
@@ -122,3 +216,8 @@ Before changing the probability, ask:
 5. Has the market already absorbed it?
 
 If any answer is unclear, reduce its influence or discard it.
+
+For narrow buckets, add:
+
+6. Does this matter for this deadline, or only for the broader event?
+7. Does this matter for this contract language, or only for a broader related event?
