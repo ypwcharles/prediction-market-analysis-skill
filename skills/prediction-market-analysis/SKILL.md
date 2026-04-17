@@ -286,6 +286,7 @@ Do not replace the template with custom headings.
 Do not start with a prose summary before section 1.
 Do not use bold summary headers as substitutes for the numbered template.
 If a field is unavailable, say `not provided`, `unknown`, or `not assessable from prompt` rather than omitting it.
+For every specific market or preferred expression you mention, include a direct market URL when it is available.
 
 Before writing any substantive content, first emit the exact eight section headers in order and then fill them.
 
@@ -295,6 +296,7 @@ Before writing any substantive content, first emit the exact eight section heade
 ### 2. Market Summary
 - platform
 - market title
+- market link
 - trade archetype
 - expression / rule-scope differences
 - settlement rule
@@ -350,6 +352,7 @@ If the input is thematic and multiple candidate markets are discovered:
 
 - start with a short ranked shortlist
 - include the preferred expression for each surviving thesis
+- include a direct market link for each preferred expression in the shortlist
 - then provide full detailed reports only for markets that survive screening
 
 ## Archetype-Specific Standards
