@@ -1,0 +1,6 @@
+[MONITOR]
+thesis: NO position relies on rumor premium mean reversion.
+trigger: price_reprice
+state: fired
+observation: YES ask touched 55c; threshold was 52c.
+suggested action: Re-check edge and tighten max entry before adding size.

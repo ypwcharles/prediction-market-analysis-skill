@@ -1,0 +1,7 @@
+[RESEARCH]
+thesis: Potential reprice if shipping-flow narrative weakens.
+summary: Related conflict buckets moved together despite different settlement verbs.
+watch: Watch for any wording shift from ceasefire to conflict-ends contracts.
+citations (claim-aware):
+1. Exchange activity concentrated in short-dated buckets overnight. [Gamma board export]
+2. No official policy statement supports the most aggressive timeline. [Primary-wire sweep]

@@ -1,0 +1,14 @@
+[
+  {
+    "source_id": "x_polymarket_001",
+    "url": "https://x.com/polymarket/status/123456789",
+    "claim_snippet": "Polymarket account posted an update.",
+    "tier": "supplementary"
+  },
+  {
+    "source_id": "x_reporter_002",
+    "url": "https://x.com/example_reporter/status/987654321",
+    "claim_snippet": "Reporter says officials expect a vote tonight.",
+    "tier": "supplementary"
+  }
+]
