@@ -79,7 +79,7 @@ The real-world outcome is already effectively decided, but the market has not fu
 Prioritize:
 
 - rule text
-- oracle / resolution source behavior
+- oracle / settlement source behavior
 - settlement ambiguity
 - capital lock-up
 - operational tail risk
@@ -196,7 +196,7 @@ Before assigning a probability, split the thesis into:
 - probability it happens within this contract window
 - probability the market resolves cleanly under the written rules
 
-If the user's thesis is mostly "this probably happens eventually" but the contract requires a narrow deadline, treat that as a contract-selection warning, not as full support for the asked market.
+If the user's thesis is mostly "event probably happens" but the contract requires a narrow deadline, treat that as a contract-selection warning, not as full support for the asked market.
 
 ### 7. Audit expression and bucket selection
 
@@ -286,6 +286,7 @@ Do not replace the template with custom headings.
 Do not start with a prose summary before section 1.
 Do not use bold summary headers as substitutes for the numbered template.
 If a field is unavailable, say `not provided`, `unknown`, or `not assessable from prompt` rather than omitting it.
+For every specific market or preferred expression you mention, include a direct market URL when it is available.
 
 Before writing any substantive content, first emit the exact eight section headers in order and then fill them.
 
@@ -295,6 +296,7 @@ Before writing any substantive content, first emit the exact eight section heade
 ### 2. Market Summary
 - platform
 - market title
+- market link
 - trade archetype
 - expression / rule-scope differences
 - settlement rule
@@ -350,6 +352,7 @@ If the input is thematic and multiple candidate markets are discovered:
 
 - start with a short ranked shortlist
 - include the preferred expression for each surviving thesis
+- include a direct market link for each preferred expression in the shortlist
 - then provide full detailed reports only for markets that survive screening
 
 ## Archetype-Specific Standards
@@ -358,7 +361,7 @@ If the input is thematic and multiple candidate markets are discovered:
 
 Approve only if:
 
-- the real-world state is already effectively known
+- the real-world outcome is already effectively known
 - written rules still point the same way
 - oracle or resolution discretion is not the main risk
 - capital lock-up and tail risk are explicitly priced
@@ -426,3 +429,4 @@ Return `NO TRADE` if any of the following is true:
 - Read `references/probability-and-kelly.md` before generating intervals, choosing the best expression, pricing edge, or sizing a trade.
 - Read `references/domain-adapters.md` when the market falls into politics/macro, crypto, or sports.
 - Read `references/research-and-open-source.md` when you need the research foundation or design rationale behind this skill.
+
