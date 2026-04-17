@@ -69,6 +69,7 @@ class AlertSeed:
     dedupe_key: str
     expression_key: str
     expression_summary: str
+    rules_text: str | None
     spread_bps: float | None
     slippage_bps: float | None
     is_degraded: bool
@@ -302,6 +303,7 @@ def _build_alert_seeds(
                 dedupe_key=f"scanner-seed::{candidate.expression_key}",
                 expression_key=candidate.expression_key,
                 expression_summary=candidate.expression_summary,
+                rules_text=candidate.rules_text,
                 spread_bps=candidate.spread_bps,
                 slippage_bps=candidate.slippage_bps,
                 is_degraded=candidate.is_degraded,

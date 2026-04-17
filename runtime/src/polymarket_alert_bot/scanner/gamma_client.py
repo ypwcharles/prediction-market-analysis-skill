@@ -48,6 +48,18 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
     for raw_event in raw_events:
         event_id = _string_or_none(raw_event.get("id"))
         event_slug = _string_or_none(raw_event.get("slug"))
+        event_title = _string_or_none(raw_event.get("title")) or _string_or_none(raw_event.get("question"))
+        event_rules_text = _compose_rules_text(
+            raw_event,
+            fields=(
+                "description",
+                "rules",
+                "resolution",
+                "resolutionCriteria",
+                "resolutionSource",
+                "resolution_source",
+            ),
+        )
         if event_id is None:
             continue
 
@@ -69,6 +81,18 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             status = _string_or_none(raw_market.get("status")) or "unknown"
             active = bool(raw_market.get("active", False))
             liquidity_usd = _to_float(raw_market.get("liquidity"))
+            market_rules_text = _compose_rules_text(
+                raw_market,
+                fields=(
+                    "description",
+                    "rules",
+                    "resolution",
+                    "resolutionCriteria",
+                    "resolutionSource",
+                    "resolution_source",
+                ),
+            )
+            rules_text = _merge_rules_text(event_rules_text, market_rules_text)
 
             normalized_markets.append(
                 {
@@ -80,6 +104,7 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                     "token_id": token_id,
                     "condition_id": condition_id,
                     "liquidity_usd": liquidity_usd,
+                    "rules_text": rules_text,
                 }
             )
 
@@ -89,6 +114,8 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             {
                 "id": event_id,
                 "slug": event_slug,
+                "title": event_title,
+                "rules_text": event_rules_text,
                 "markets": normalized_markets,
             }
         )
@@ -139,3 +166,33 @@ def _to_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _compose_rules_text(raw: dict[str, Any], *, fields: tuple[str, ...]) -> str | None:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for field in fields:
+        value = raw.get(field)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+        lines.append(text)
+        seen.add(text)
+    return "\n".join(lines) if lines else None
+
+
+def _merge_rules_text(*chunks: str | None) -> str | None:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        if not chunk:
+            continue
+        for raw_line in chunk.splitlines():
+            line = raw_line.strip()
+            if not line or line in seen:
+                continue
+            lines.append(line)
+            seen.add(line)
+    return "\n".join(lines) if lines else None

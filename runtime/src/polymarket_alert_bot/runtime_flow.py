@@ -246,45 +246,50 @@ def execute_monitor_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig |
     conn = connect_db(paths.db_path)
     apply_migrations(conn)
     repository = RuntimeRepository(conn)
+    registry = load_source_registry(paths.sources_path)
+    configured_evidence = _load_configured_evidence(config)
+    skill = SkillAdapter(
+        timeout_seconds=config.judgment_timeout_seconds,
+        external_command=list(config.judgment_command) or None,
+    )
     delivered_alert_ids: list[str] = []
     now_iso = _now_iso()
 
-    for payload in outcome.fired_actions + outcome.pending_recheck_actions:
+    for payload in outcome.fired_actions:
         source_alert = repository.get_alert(str(payload["alert_id"]))
         if source_alert is None:
             continue
-        monitor_alert_id = str(uuid4())
-        message = render_monitor_alert(
-            {
-                "thesis": source_alert["why_now"] or source_alert["thesis_cluster_id"] or "-",
-                "trigger": payload,
-                "suggested_action": payload["suggested_action"],
-            }
-        )
-        message_ref = _deliver_message(
+        monitor_alert_id = _deliver_monitor_action(
+            repository=repository,
             config=config,
-            text=message,
-            alert_id=monitor_alert_id,
-            thesis_cluster_id=str(payload["thesis_cluster_id"]),
+            run_id=outcome.run_id,
+            source_alert=source_alert,
+            payload=payload,
+            now_iso=now_iso,
         )
-        repository.insert_alert(
-            {
-                "id": monitor_alert_id,
-                "run_id": outcome.run_id,
-                "thesis_cluster_id": payload["thesis_cluster_id"],
-                "condition_id": source_alert["condition_id"],
-                "event_id": source_alert["event_id"],
-                "market_id": source_alert["market_id"],
-                "token_id": source_alert["token_id"],
-                "alert_kind": "monitor",
-                "delivery_mode": "immediate",
-                "why_now": message,
-                "status": "active",
-                "telegram_chat_id": message_ref.chat_id if message_ref else None,
-                "telegram_message_id": message_ref.message_id if message_ref else None,
-                "dedupe_key": f"monitor::{payload['trigger_id']}::{now_iso}",
-                "created_at": now_iso,
-            }
+        delivered_alert_ids.append(monitor_alert_id)
+
+    for payload in outcome.pending_recheck_actions:
+        source_alert = repository.get_alert(str(payload["alert_id"]))
+        if source_alert is None:
+            continue
+        parsed = _judge_monitor_recheck(
+            skill=skill,
+            conn=conn,
+            source_alert=source_alert,
+            payload=payload,
+            configured_evidence=configured_evidence,
+            registry=registry,
+        )
+        if not _monitor_recheck_allows_delivery(parsed):
+            continue
+        monitor_alert_id = _deliver_monitor_action(
+            repository=repository,
+            config=config,
+            run_id=outcome.run_id,
+            source_alert=source_alert,
+            payload=payload,
+            now_iso=now_iso,
         )
         delivered_alert_ids.append(monitor_alert_id)
 
@@ -307,7 +312,7 @@ def _judge_seed(
     enriched = enrich_evidence(evidence_items, registry)
     context = build_judgment_context(
         candidate_facts=_seed_candidate_facts(seed),
-        rules_text=None,
+        rules_text=seed.rules_text,
         executable_fields=_seed_executable_fields(seed),
         enriched_evidence=enriched,
         prior_cluster_state=None,
@@ -566,6 +571,7 @@ def _seed_candidate_facts(seed: AlertSeed) -> dict[str, Any]:
         "condition_id": seed.condition_id,
         "expression_summary": seed.expression_summary,
         "expression_key": seed.expression_key,
+        "rules_text": seed.rules_text or "",
         "degraded_reason": seed.degraded_reason,
     }
 
@@ -625,6 +631,125 @@ def _source_id(domain_or_handle: str) -> str:
     slug = domain_or_handle.strip().lower().replace("https://", "").replace("http://", "")
     slug = slug.replace("/", "-").replace("@", "at-").replace(".", "-")
     return slug or f"source-{uuid4()}"
+
+
+def _deliver_monitor_action(
+    *,
+    repository: RuntimeRepository,
+    config: RuntimeConfig,
+    run_id: str,
+    source_alert,
+    payload: dict[str, object],
+    now_iso: str,
+) -> str:
+    monitor_alert_id = str(uuid4())
+    message = render_monitor_alert(
+        {
+            "thesis": source_alert["why_now"] or source_alert["thesis_cluster_id"] or "-",
+            "trigger": payload,
+            "suggested_action": payload["suggested_action"],
+        }
+    )
+    message_ref = _deliver_message(
+        config=config,
+        text=message,
+        alert_id=monitor_alert_id,
+        thesis_cluster_id=str(payload["thesis_cluster_id"]),
+    )
+    repository.insert_alert(
+        {
+            "id": monitor_alert_id,
+            "run_id": run_id,
+            "thesis_cluster_id": payload["thesis_cluster_id"],
+            "condition_id": source_alert["condition_id"],
+            "event_id": source_alert["event_id"],
+            "market_id": source_alert["market_id"],
+            "token_id": source_alert["token_id"],
+            "alert_kind": "monitor",
+            "delivery_mode": "immediate",
+            "why_now": message,
+            "status": "active",
+            "telegram_chat_id": message_ref.chat_id if message_ref else None,
+            "telegram_message_id": message_ref.message_id if message_ref else None,
+            "dedupe_key": f"monitor::{payload['trigger_id']}::{now_iso}",
+            "created_at": now_iso,
+        }
+    )
+    return monitor_alert_id
+
+
+def _judge_monitor_recheck(
+    *,
+    skill: SkillAdapter,
+    conn,
+    source_alert,
+    payload: dict[str, object],
+    configured_evidence: Iterable[EvidenceItem],
+    registry,
+) -> ParsedJudgment:
+    evidence_items = list(configured_evidence)
+    observation = payload.get("observation")
+    if observation is not None:
+        evidence_items.append(
+            EvidenceItem(
+                source_id=f"monitor-trigger-{payload['trigger_id']}",
+                source_kind="monitor_trigger",
+                fetched_at=_now_iso(),
+                url=f"monitor://trigger/{payload['trigger_id']}",
+                claim_snippet=f"Trigger observation: {observation}",
+                tier="supplementary",
+                conflict_status=None,
+            )
+        )
+    enriched = enrich_evidence(evidence_items, registry)
+    context = build_judgment_context(
+        candidate_facts={
+            "mode": "monitor_recheck",
+            "alert_id": source_alert["id"],
+            "thesis_cluster_id": source_alert["thesis_cluster_id"],
+            "condition_id": source_alert["condition_id"],
+            "event_id": source_alert["event_id"],
+            "market_id": source_alert["market_id"],
+            "token_id": source_alert["token_id"],
+            "trigger_id": payload["trigger_id"],
+            "trigger_type": payload["trigger_type"],
+            "trigger_state": payload.get("trigger_state"),
+            "suggested_action": payload.get("suggested_action"),
+            "observation": observation,
+            "narrative": source_alert["why_now"],
+        },
+        rules_text=_build_monitor_recheck_rules_text(source_alert),
+        executable_fields={
+            "theoretical_edge_cents": source_alert["theoretical_edge_cents"],
+            "executable_edge_cents": source_alert["executable_edge_cents"],
+            "spread_bps": source_alert["spread_bps"],
+            "slippage_bps": source_alert["slippage_bps"],
+            "max_entry_cents": source_alert["max_entry_cents"],
+        },
+        enriched_evidence=enriched,
+        prior_cluster_state=None,
+        position_context=_lookup_position_context(conn, str(source_alert["token_id"] or "")),
+    )
+    return skill.judge(context)
+
+
+def _build_monitor_recheck_rules_text(source_alert) -> str:
+    parts = [source_alert["kill_criteria_text"], source_alert["why_now"]]
+    lines: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if part is None:
+            continue
+        text = str(part).strip()
+        if not text or text in seen:
+            continue
+        lines.append(text)
+        seen.add(text)
+    return "\n".join(lines)
+
+
+def _monitor_recheck_allows_delivery(parsed: ParsedJudgment) -> bool:
+    return parsed.alert_kind in {"strict", "strict_degraded", "reprice", "monitor"}
 
 
 def _now_iso() -> str:

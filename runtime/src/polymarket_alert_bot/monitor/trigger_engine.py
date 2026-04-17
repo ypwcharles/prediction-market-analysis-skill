@@ -111,7 +111,7 @@ def is_narrative_trigger(trigger: dict[str, Any]) -> bool:
     return threshold_kind in {"narrative", "context", "news", "thesis"}
 
 
-def _observation_key_for_threshold(threshold_kind: str | None) -> str:
+def observation_key_for_threshold(threshold_kind: str | None) -> str:
     normalized = str(threshold_kind or "").strip().lower()
     aliases = {
         "price": "price_cents",
@@ -142,7 +142,7 @@ def evaluate_stored_trigger(
 ) -> dict[str, Any]:
     now = now or datetime.now(UTC)
     baseline = deepcopy(trigger)
-    observation_key = _observation_key_for_threshold(baseline.get("threshold_kind"))
+    observation_key = observation_key_for_threshold(baseline.get("threshold_kind"))
     observation = observations.get(observation_key)
     if is_narrative_trigger(baseline):
         return {

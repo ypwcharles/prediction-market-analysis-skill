@@ -24,6 +24,7 @@ class ScanCandidate:
     degraded_reason: str | None
     expression_summary: str
     expression_key: str
+    rules_text: str | None
 
 
 def normalize_candidates(
@@ -36,6 +37,7 @@ def normalize_candidates(
         if event_id is None:
             continue
         event_slug = _optional_str(event.get("slug"))
+        event_rules_text = _optional_str(event.get("rules_text"))
         raw_markets = event.get("markets")
         if not isinstance(raw_markets, list):
             continue
@@ -54,6 +56,7 @@ def normalize_candidates(
             active = bool(market.get("active", False))
             market_slug = _optional_str(market.get("slug"))
             liquidity_usd = _to_float(market.get("liquidity_usd"))
+            rules_text = _optional_str(market.get("rules_text")) or event_rules_text
 
             snapshot = books_by_token.get(token_id)
             if snapshot is None:
@@ -79,6 +82,7 @@ def normalize_candidates(
                     degraded_reason=snapshot.degraded_reason,
                     expression_summary=expression_summary,
                     expression_key=expression_key,
+                    rules_text=rules_text,
                 )
             )
     return candidates
