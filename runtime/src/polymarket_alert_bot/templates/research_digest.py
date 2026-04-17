@@ -11,11 +11,11 @@ def _as_text(value: Any, *, default: str = "-") -> str:
 
 
 def _citation_brief(index: int, citation: Mapping[str, Any]) -> str:
-    source = citation.get("source", {})
+    source = citation.get("source", citation.get("source_ref", {}))
     if not isinstance(source, Mapping):
         source = {}
     claim = _as_text(citation.get("claim"))
-    source_name = _as_text(source.get("name"), default="unknown")
+    source_name = _as_text(source.get("name", citation.get("source_name")), default="unknown")
     return f"{index}. {claim} [{source_name}]"
 
 

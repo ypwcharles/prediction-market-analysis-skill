@@ -11,6 +11,7 @@ class ScanCandidate:
     event_id: str
     market_id: str
     token_id: str
+    condition_id: str | None
     event_slug: str | None
     market_slug: str | None
     question: str
@@ -47,6 +48,7 @@ def normalize_candidates(
             if market_id is None or token_id is None:
                 continue
 
+            condition_id = _optional_str(market.get("condition_id"))
             question = _optional_str(market.get("question")) or ""
             status = (_optional_str(market.get("status")) or "unknown").lower()
             active = bool(market.get("active", False))
@@ -57,13 +59,14 @@ def normalize_candidates(
             if snapshot is None:
                 snapshot = degraded_snapshot(token_id, "book_missing")
             expression_summary = _build_expression_summary(question, market_slug)
-            expression_key = _build_expression_key(event_slug, expression_summary)
+            expression_key = _build_expression_key(event_id, event_slug, expression_summary)
 
             candidates.append(
                 ScanCandidate(
                     event_id=event_id,
                     market_id=market_id,
                     token_id=token_id,
+                    condition_id=condition_id,
                     event_slug=event_slug,
                     market_slug=market_slug,
                     question=question,
@@ -87,8 +90,8 @@ def _build_expression_summary(question: str, market_slug: str | None) -> str:
     return (market_slug or "unknown-expression").strip()
 
 
-def _build_expression_key(event_slug: str | None, expression_summary: str) -> str:
-    event_piece = (event_slug or "unknown-event").strip().lower()
+def _build_expression_key(event_id: str, event_slug: str | None, expression_summary: str) -> str:
+    event_piece = (event_id or event_slug or "unknown-event").strip().lower()
     summary_piece = " ".join(expression_summary.split()).lower()
     return f"{event_piece}::{summary_piece}"
 

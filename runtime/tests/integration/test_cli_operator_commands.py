@@ -1,0 +1,265 @@
+from __future__ import annotations
+
+import json
+
+from polymarket_alert_bot.cli import main
+from polymarket_alert_bot.storage.db import connect_db
+from polymarket_alert_bot.storage.migrations import apply_migrations
+
+
+def test_callback_command_persists_feedback_and_claim(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    apply_migrations(conn)
+    conn.execute(
+        """
+        INSERT INTO thesis_clusters (
+            id, canonical_name, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        ["cluster-1", "Sample thesis", "open", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+    )
+    conn.execute(
+        """
+        INSERT INTO runs (
+            id, run_type, status, started_at, finished_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ["run-1", "scan", "clean", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+    )
+    conn.execute(
+        """
+        INSERT INTO alerts (
+            id, run_id, thesis_cluster_id, condition_id, market_id, token_id,
+            alert_kind, delivery_mode, status, dedupe_key, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "alert-1",
+            "run-1",
+            "cluster-1",
+            "cond-1",
+            "market-1",
+            "token-1",
+            "strict",
+            "immediate",
+            "active",
+            "dedupe-1",
+            "2026-04-17T00:00:00+00:00",
+        ],
+    )
+    conn.commit()
+
+    payload_path = tmp_path / "callback.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "callback_query": {
+                    "id": "cb-1",
+                    "data": "fb:ordered:alert-1:cluster-1",
+                    "from": {"id": 12345},
+                    "message": {
+                        "message_id": 55,
+                        "chat": {"id": -100123456},
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["callback", "--payload-file", str(payload_path)]) == 0
+
+    feedback_row = conn.execute(
+        "SELECT feedback_type, telegram_chat_id, telegram_message_id FROM feedback"
+    ).fetchone()
+    assert dict(feedback_row) == {
+        "feedback_type": "claimed_buy",
+        "telegram_chat_id": "-100123456",
+        "telegram_message_id": "55",
+    }
+
+    claim_row = conn.execute(
+        """
+        SELECT condition_id, token_id, truth_source, status
+        FROM positions
+        WHERE truth_source = 'telegram_claim'
+        """
+    ).fetchone()
+    assert dict(claim_row) == {
+        "condition_id": "cond-1",
+        "token_id": "token-1",
+        "truth_source": "telegram_claim",
+        "status": "claimed_only",
+    }
+
+
+def test_promote_command_copies_archive_artifact(tmp_path):
+    archive_path = tmp_path / "strict-alert-1.md"
+    archive_path.write_text("# strict memo\n", encoding="utf-8")
+    destination_dir = tmp_path / "promoted"
+
+    assert main(
+        [
+            "promote",
+            str(archive_path),
+            "--destination-dir",
+            str(destination_dir),
+        ]
+    ) == 0
+
+    promoted_path = destination_dir / archive_path.name
+    assert promoted_path.exists()
+    assert promoted_path.read_text(encoding="utf-8") == "# strict memo\n"
+
+
+def test_callback_seen_acknowledges_fired_trigger(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    apply_migrations(conn)
+    _seed_alert_context(conn, alert_id="alert-ack", run_id="run-ack", cluster_id="cluster-ack")
+    conn.execute(
+        """
+        INSERT INTO triggers (
+            id, thesis_cluster_id, alert_id, trigger_type, threshold_kind,
+            comparison, threshold_value, suggested_action, state, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "trigger-ack",
+            "cluster-ack",
+            "alert-ack",
+            "price_reprice",
+            "price",
+            "<=",
+            "40",
+            "buy",
+            "fired",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+        ],
+    )
+    conn.commit()
+
+    payload_path = tmp_path / "ack.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "callback_query": {
+                    "id": "cb-ack",
+                    "data": "fb:ack:alert-ack:cluster-ack",
+                    "message": {"message_id": 56, "chat": {"id": -100123456}},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["callback", "--payload-file", str(payload_path)]) == 0
+
+    trigger_row = conn.execute(
+        "SELECT state FROM triggers WHERE id = 'trigger-ack'"
+    ).fetchone()
+    assert trigger_row["state"] == "acknowledged"
+
+
+def test_callback_close_thesis_closes_cluster_and_triggers(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    apply_migrations(conn)
+    _seed_alert_context(conn, alert_id="alert-close", run_id="run-close", cluster_id="cluster-close")
+    conn.execute(
+        """
+        INSERT INTO triggers (
+            id, thesis_cluster_id, alert_id, trigger_type, threshold_kind,
+            comparison, threshold_value, suggested_action, state, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "trigger-close",
+            "cluster-close",
+            "alert-close",
+            "price_reprice",
+            "price",
+            "<=",
+            "40",
+            "reduce",
+            "fired",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+        ],
+    )
+    conn.commit()
+
+    payload_path = tmp_path / "close.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "callback_query": {
+                    "id": "cb-close",
+                    "data": "fb:close:alert-close:cluster-close",
+                    "message": {"message_id": 57, "chat": {"id": -100123456}},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["callback", "--payload-file", str(payload_path)]) == 0
+
+    cluster_row = conn.execute(
+        "SELECT status, closed_reason FROM thesis_clusters WHERE id = 'cluster-close'"
+    ).fetchone()
+    trigger_row = conn.execute(
+        "SELECT state FROM triggers WHERE id = 'trigger-close'"
+    ).fetchone()
+    assert dict(cluster_row) == {
+        "status": "closed",
+        "closed_reason": "telegram_close_thesis",
+    }
+    assert trigger_row["state"] == "closed"
+
+
+def _seed_alert_context(conn, *, alert_id: str, run_id: str, cluster_id: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO thesis_clusters (
+            id, canonical_name, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        [cluster_id, "Sample thesis", "open", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+    )
+    conn.execute(
+        """
+        INSERT INTO runs (
+            id, run_type, status, started_at, finished_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        [run_id, "scan", "clean", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+    )
+    conn.execute(
+        """
+        INSERT INTO alerts (
+            id, run_id, thesis_cluster_id, condition_id, market_id, token_id,
+            alert_kind, delivery_mode, status, dedupe_key, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            alert_id,
+            run_id,
+            cluster_id,
+            "cond-1",
+            "market-1",
+            "token-1",
+            "strict",
+            "immediate",
+            "active",
+            f"dedupe-{alert_id}",
+            "2026-04-17T00:00:00+00:00",
+        ],
+    )
+    conn.commit()

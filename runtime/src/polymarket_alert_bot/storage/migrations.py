@@ -39,6 +39,7 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS cluster_expressions (
             id TEXT PRIMARY KEY,
             thesis_cluster_id TEXT NOT NULL,
+            condition_id TEXT,
             event_id TEXT,
             market_id TEXT,
             token_id TEXT,
@@ -55,6 +56,7 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             id TEXT PRIMARY KEY,
             run_id TEXT NOT NULL,
             thesis_cluster_id TEXT,
+            condition_id TEXT,
             event_id TEXT,
             market_id TEXT,
             token_id TEXT,
@@ -173,4 +175,16 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    _ensure_column(conn, "cluster_expressions", "condition_id", "TEXT")
+    _ensure_column(conn, "alerts", "condition_id", "TEXT")
     conn.commit()
+
+
+def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
+    columns = {
+        row[1]
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name in columns:
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")

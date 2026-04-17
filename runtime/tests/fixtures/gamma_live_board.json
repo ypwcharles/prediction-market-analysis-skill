@@ -1,0 +1,28 @@
+[
+  {
+    "id": "event-live-election",
+    "slug": "live-election-2026",
+    "markets": [
+      {
+        "id": "mkt-live-tradable",
+        "slug": "candidate-a-wins-live",
+        "question": "Will Candidate A win in the live board?",
+        "status": "open",
+        "active": true,
+        "conditionId": "cond-live-a",
+        "liquidity": 9200,
+        "token_id": "token-live-tradable"
+      },
+      {
+        "id": "mkt-live-degraded",
+        "slug": "candidate-b-wins-live",
+        "question": "Will Candidate B win in the live board?",
+        "status": "open",
+        "active": true,
+        "condition_id": "cond-live-b",
+        "liquidity": 6800,
+        "token_id": "token-live-degraded"
+      }
+    ]
+  }
+]

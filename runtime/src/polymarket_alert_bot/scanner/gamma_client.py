@@ -29,9 +29,12 @@ def fetch_events(
         close_client = True
 
     try:
-        response = client.get(url, params={"limit": limit})
-        response.raise_for_status()
-        payload = response.json()
+        try:
+            response = client.get(url, params={"limit": limit})
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return []
         if not isinstance(payload, list):
             return []
         return [item for item in payload if isinstance(item, dict)]
@@ -60,6 +63,7 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             if market_id is None:
                 continue
             token_id = _extract_token_id(raw_market)
+            condition_id = _extract_condition_id(raw_market)
             market_slug = _string_or_none(raw_market.get("slug"))
             question = _string_or_none(raw_market.get("question")) or ""
             status = _string_or_none(raw_market.get("status")) or "unknown"
@@ -74,6 +78,7 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                     "status": status,
                     "active": active,
                     "token_id": token_id,
+                    "condition_id": condition_id,
                     "liquidity_usd": liquidity_usd,
                 }
             )
@@ -107,6 +112,16 @@ def _extract_token_id(raw_market: dict[str, Any]) -> str | None:
             maybe_id = _string_or_none(token.get("id"))
             if maybe_id is not None:
                 return maybe_id
+    return None
+
+
+def _extract_condition_id(raw_market: dict[str, Any]) -> str | None:
+    direct = _string_or_none(raw_market.get("condition_id"))
+    if direct is not None:
+        return direct
+    camel = _string_or_none(raw_market.get("conditionId"))
+    if camel is not None:
+        return camel
     return None
 
 

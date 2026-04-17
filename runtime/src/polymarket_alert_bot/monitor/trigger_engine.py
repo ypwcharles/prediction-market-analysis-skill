@@ -18,7 +18,6 @@ def _parse_numeric(value: str | float | int | None) -> float | None:
 
 def condition_met(trigger: dict[str, Any], observed_value: float | str | None = None, observed_state: str | None = None) -> bool:
     comparison = trigger["comparison"]
-    threshold_kind = trigger["threshold_kind"]
     threshold_value = trigger["threshold_value"]
 
     if comparison == "state_change":
@@ -36,7 +35,10 @@ def condition_met(trigger: dict[str, Any], observed_value: float | str | None = 
         ">=": lambda left, right: left >= right,
         "eq": lambda left, right: left == right,
     }
-    return operations[comparison](actual, expected)
+    operation = operations.get(comparison)
+    if operation is None:
+        return False
+    return operation(actual, expected)
 
 
 def evaluate_trigger(
@@ -96,3 +98,71 @@ def close_trigger(trigger: dict[str, Any], *, now: datetime | None = None) -> di
     updated["state"] = "closed"
     updated["updated_at"] = now.isoformat()
     return updated
+
+
+def is_narrative_trigger(trigger: dict[str, Any]) -> bool:
+    requires_recheck = bool(trigger.get("requires_llm_recheck"))
+    trigger_type = str(trigger.get("trigger_type", "")).strip().lower()
+    threshold_kind = str(trigger.get("threshold_kind", "")).strip().lower()
+    if requires_recheck:
+        return True
+    if "narrative" in trigger_type:
+        return True
+    return threshold_kind in {"narrative", "context", "news", "thesis"}
+
+
+def _observation_key_for_threshold(threshold_kind: str | None) -> str:
+    normalized = str(threshold_kind or "").strip().lower()
+    aliases = {
+        "price": "price_cents",
+        "price_cents": "price_cents",
+        "edge": "executable_edge_cents",
+        "executable_edge": "executable_edge_cents",
+        "executable_edge_cents": "executable_edge_cents",
+        "theoretical_edge": "theoretical_edge_cents",
+        "theoretical_edge_cents": "theoretical_edge_cents",
+        "spread": "spread_bps",
+        "spread_bps": "spread_bps",
+        "slippage": "slippage_bps",
+        "slippage_bps": "slippage_bps",
+        "position_size": "position_size_shares",
+        "position_size_shares": "position_size_shares",
+        "position_state": "position_status",
+        "position_status": "position_status",
+        "narrative": "narrative",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def evaluate_stored_trigger(
+    trigger: dict[str, Any],
+    *,
+    observations: dict[str, Any],
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    now = now or datetime.now(UTC)
+    baseline = deepcopy(trigger)
+    observation_key = _observation_key_for_threshold(baseline.get("threshold_kind"))
+    observation = observations.get(observation_key)
+    if is_narrative_trigger(baseline):
+        return {
+            "updated_trigger": baseline,
+            "fired": False,
+            "requires_llm_recheck": True,
+            "observation": observation,
+        }
+
+    observed_state = str(observation) if observation is not None else None
+    updated = evaluate_trigger(
+        baseline,
+        observed_value=observation,
+        observed_state=observed_state,
+        now=now,
+    )
+    fired = baseline.get("state") in {"armed", "rearmed"} and updated.get("state") == "fired"
+    return {
+        "updated_trigger": updated,
+        "fired": fired,
+        "requires_llm_recheck": False,
+        "observation": observation,
+    }

@@ -9,6 +9,7 @@
         "question": "Will Candidate A win the 2026 election?",
         "status": "open",
         "active": true,
+        "conditionId": "cond-election-a",
         "liquidity": 5600,
         "token_id": "token-tradable"
       },
@@ -18,6 +19,7 @@
         "question": "Will Candidate B win the 2026 election?",
         "status": "open",
         "active": true,
+        "condition_id": "cond-election-b",
         "liquidity": 120,
         "token_id": "token-low-liq"
       },
@@ -27,6 +29,7 @@
         "question": "Will Candidate A win the 2026 election?",
         "status": "open",
         "active": true,
+        "conditionId": "cond-election-a-alt",
         "liquidity": 4800,
         "token_id": "token-duplicate"
       }
@@ -42,6 +45,7 @@
         "question": "Will the Fed cut rates by May?",
         "status": "open",
         "active": true,
+        "condition_id": "cond-fed-may",
         "liquidity": 3200,
         "token_id": "token-degraded"
       }

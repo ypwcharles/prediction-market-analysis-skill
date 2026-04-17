@@ -6,6 +6,9 @@ from polymarket_alert_bot.config.settings import RuntimePaths
 
 
 ARCHIVEABLE_ALERT_KINDS = {"strict", "reprice", "heartbeat"}
+ALERT_KIND_ALIASES = {
+    "strict_degraded": "strict",
+}
 
 
 def write_archive_artifact(
@@ -16,11 +19,17 @@ def write_archive_artifact(
     content: str,
     high_value: bool = False,
 ) -> Path | None:
-    if alert_kind not in ARCHIVEABLE_ALERT_KINDS:
+    normalized_kind = _normalize_alert_kind(alert_kind)
+    if normalized_kind not in ARCHIVEABLE_ALERT_KINDS:
         return None
-    if alert_kind == "reprice" and not high_value:
+    if normalized_kind == "reprice" and not high_value:
         return None
-    archive_path = paths.data_dir / "archives" / f"{alert_kind}-{alert_id}.md"
+    archive_path = paths.data_dir / "archives" / f"{normalized_kind}-{alert_id}.md"
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     archive_path.write_text(content, encoding="utf-8")
     return archive_path
+
+
+def _normalize_alert_kind(alert_kind: str) -> str:
+    key = alert_kind.strip().lower()
+    return ALERT_KIND_ALIASES.get(key, key)

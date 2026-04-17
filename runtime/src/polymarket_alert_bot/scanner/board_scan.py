@@ -7,9 +7,14 @@ import os
 from typing import Any
 from uuid import uuid4
 
-from polymarket_alert_bot.config.settings import RuntimePaths
+from polymarket_alert_bot.config.settings import RuntimeConfig, RuntimePaths, load_runtime_config
 from polymarket_alert_bot.models.enums import RunStatus, RunType
-from polymarket_alert_bot.scanner.clob_client import BookSnapshot, build_book_snapshots, fetch_book
+from polymarket_alert_bot.scanner.clob_client import (
+    BookSnapshot,
+    build_book_snapshots,
+    degraded_snapshot,
+    fetch_book,
+)
 from polymarket_alert_bot.scanner.gamma_client import fetch_events, normalize_events
 from polymarket_alert_bot.scanner.normalizer import ScanCandidate, normalize_candidates
 from polymarket_alert_bot.storage.db import connect_db
@@ -52,12 +57,43 @@ class ScanOutcome:
     rejected: tuple[tuple[ScanCandidate, str], ...]
 
 
+@dataclass(frozen=True)
+class AlertSeed:
+    id: str
+    run_id: str
+    event_id: str
+    market_id: str
+    token_id: str
+    condition_id: str | None
+    alert_kind: str
+    dedupe_key: str
+    expression_key: str
+    expression_summary: str
+    spread_bps: float | None
+    slippage_bps: float | None
+    is_degraded: bool
+    degraded_reason: str | None
+    judgment_seed: dict[str, Any] | None
+    evidence_seeds: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class ScanRunResult:
+    run_id: str
+    status: str
+    degraded_reason: str | None
+    outcome: ScanOutcome
+    alert_seeds: tuple[AlertSeed, ...]
+
+
 def run_scan(
     paths: RuntimePaths,
     *,
     gamma_payload: Sequence[dict[str, Any]] | None = None,
     clob_payload: Mapping[str, Any] | Sequence[Any] | None = None,
-) -> str:
+    judgment_seed_inputs: Mapping[str, object] | None = None,
+    evidence_seed_inputs: Mapping[str, object] | None = None,
+) -> ScanRunResult:
     timestamp = datetime.now(UTC).isoformat()
     run_id = str(uuid4())
 
@@ -65,7 +101,7 @@ def run_scan(
     if gamma_payload is not None:
         outcome = scan_board(gamma_payload, clob_payload or {"books": []})
     elif os.environ.get("POLYMARKET_ALERT_BOT_ENABLE_SCAN") == "1":
-        outcome = _run_live_scan()
+        outcome = _run_live_scan(load_runtime_config())
 
     status = RunStatus.CLEAN.value
     degraded_reason = None
@@ -73,9 +109,17 @@ def run_scan(
         status = RunStatus.DEGRADED.value
         degraded_reason = "executable_checks_partial"
 
+    alert_seeds = _build_alert_seeds(
+        run_id,
+        outcome,
+        judgment_seed_inputs=judgment_seed_inputs or {},
+        evidence_seed_inputs=evidence_seed_inputs or {},
+    )
+
     conn = connect_db(paths.db_path)
     apply_migrations(conn)
-    RuntimeRepository(conn).upsert_run(
+    repository = RuntimeRepository(conn)
+    repository.upsert_run(
         {
             "id": run_id,
             "run_type": RunType.SCAN.value,
@@ -92,7 +136,14 @@ def run_scan(
             "created_at": timestamp,
         }
     )
-    return run_id
+    _persist_alert_seeds(repository, alert_seeds, timestamp)
+    return ScanRunResult(
+        run_id=run_id,
+        status=status,
+        degraded_reason=degraded_reason,
+        outcome=outcome,
+        alert_seeds=alert_seeds,
+    )
 
 
 def scan_board(
@@ -104,8 +155,9 @@ def scan_board(
     return _prefilter(events, candidates)
 
 
-def _run_live_scan() -> ScanOutcome:
-    raw_events = fetch_events()
+def _run_live_scan(config: RuntimeConfig) -> ScanOutcome:
+    gamma_limit = max(config.gamma_limit, 1)
+    raw_events = _fetch_live_events(config.gamma_events_url, gamma_limit)
     events = normalize_events(raw_events)
     books_by_token: dict[str, BookSnapshot] = {}
     for event in events:
@@ -118,9 +170,30 @@ def _run_live_scan() -> ScanOutcome:
             token_id = market.get("token_id")
             if not isinstance(token_id, str) or token_id in books_by_token:
                 continue
-            books_by_token[token_id] = fetch_book(token_id)
+            books_by_token[token_id] = _fetch_live_book(token_id, config.clob_book_url)
     candidates = normalize_candidates(events, books_by_token)
     return _prefilter(events, candidates)
+
+
+def _fetch_live_events(url: str, limit: int) -> list[dict[str, Any]]:
+    try:
+        return fetch_events(url=url, limit=limit)
+    except TypeError:
+        # Support no-kwargs monkeypatch stubs in integration tests.
+        return fetch_events()
+
+
+def _fetch_live_book(token_id: str, url: str) -> BookSnapshot:
+    try:
+        snapshot = fetch_book(token_id, url=url)
+    except TypeError:
+        # Support simplified monkeypatch stubs that only accept token_id.
+        snapshot = fetch_book(token_id)
+    except Exception:
+        return degraded_snapshot(token_id, "book_fetch_error")
+    if isinstance(snapshot, BookSnapshot):
+        return snapshot
+    return degraded_snapshot(token_id, "book_malformed")
 
 
 def _prefilter(events: Sequence[dict[str, Any]], candidates: Sequence[ScanCandidate]) -> ScanOutcome:
@@ -203,3 +276,107 @@ def _dry_outcome() -> ScanOutcome:
         degraded=(),
         rejected=(),
     )
+
+
+def _build_alert_seeds(
+    run_id: str,
+    outcome: ScanOutcome,
+    *,
+    judgment_seed_inputs: Mapping[str, object],
+    evidence_seed_inputs: Mapping[str, object],
+) -> tuple[AlertSeed, ...]:
+    seeds: list[AlertSeed] = []
+    for candidate in tuple(outcome.tradable) + tuple(outcome.degraded):
+        judgment_seed = _resolve_judgment_seed(candidate, judgment_seed_inputs)
+        evidence_seeds = _resolve_evidence_seeds(candidate, evidence_seed_inputs)
+        alert_kind = "scanner_seed_degraded" if candidate.is_degraded else "scanner_seed"
+        seeds.append(
+            AlertSeed(
+                id=str(uuid4()),
+                run_id=run_id,
+                event_id=candidate.event_id,
+                market_id=candidate.market_id,
+                token_id=candidate.token_id,
+                condition_id=candidate.condition_id,
+                alert_kind=alert_kind,
+                dedupe_key=f"scanner-seed::{candidate.expression_key}",
+                expression_key=candidate.expression_key,
+                expression_summary=candidate.expression_summary,
+                spread_bps=candidate.spread_bps,
+                slippage_bps=candidate.slippage_bps,
+                is_degraded=candidate.is_degraded,
+                degraded_reason=candidate.degraded_reason,
+                judgment_seed=judgment_seed,
+                evidence_seeds=evidence_seeds,
+            )
+        )
+    return tuple(seeds)
+
+
+def _persist_alert_seeds(
+    repository: RuntimeRepository,
+    alert_seeds: Sequence[AlertSeed],
+    created_at: str,
+) -> None:
+    for seed in alert_seeds:
+        repository.insert_alert(
+            {
+                "id": seed.id,
+                "run_id": seed.run_id,
+                "event_id": seed.event_id,
+                "market_id": seed.market_id,
+                "token_id": seed.token_id,
+                "condition_id": seed.condition_id,
+                "alert_kind": seed.alert_kind,
+                "delivery_mode": "deferred",
+                "status": "seeded",
+                "dedupe_key": seed.dedupe_key,
+                "spread_bps": seed.spread_bps,
+                "slippage_bps": seed.slippage_bps,
+                "why_now": seed.expression_summary,
+                "created_at": created_at,
+            }
+        )
+
+
+def _resolve_judgment_seed(
+    candidate: ScanCandidate,
+    inputs: Mapping[str, object],
+) -> dict[str, Any] | None:
+    for key in _seed_lookup_keys(candidate):
+        value = inputs.get(key)
+        if isinstance(value, Mapping):
+            return dict(value)
+    return None
+
+
+def _resolve_evidence_seeds(
+    candidate: ScanCandidate,
+    inputs: Mapping[str, object],
+) -> tuple[dict[str, Any], ...]:
+    for key in _seed_lookup_keys(candidate):
+        value = inputs.get(key)
+        if isinstance(value, Mapping):
+            return (dict(value),)
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            evidence: list[dict[str, Any]] = []
+            for item in value:
+                if isinstance(item, Mapping):
+                    evidence.append(dict(item))
+            if evidence:
+                return tuple(evidence)
+    return ()
+
+
+def _seed_lookup_keys(candidate: ScanCandidate) -> tuple[str, ...]:
+    keys: list[str] = []
+    if candidate.condition_id:
+        keys.append(candidate.condition_id)
+    keys.extend(
+        (
+            candidate.expression_key,
+            candidate.market_id,
+            candidate.token_id,
+        )
+    )
+    return tuple(keys)

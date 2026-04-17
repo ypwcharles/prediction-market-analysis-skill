@@ -24,22 +24,26 @@ def _format_usdc(value: Any) -> str:
 
 def _citation_line(index: int, citation: Mapping[str, Any]) -> str:
     claim = _as_text(citation.get("claim"))
-    source = citation.get("source", {})
+    source = citation.get("source", citation.get("source_ref", {}))
     if not isinstance(source, Mapping):
         source = {}
     source_name = _as_text(
-        source.get("name", citation.get("source_name", citation.get("source_id"))),
+        source.get("name", citation.get("source_name", citation.get("source_id", source.get("id")))),
         default="unknown",
     )
     tier = _as_text(source.get("tier", citation.get("source_tier")), default="unknown")
     url = _as_text(source.get("url", citation.get("url")))
     fetched_at = _as_text(source.get("fetched_at", citation.get("fetched_at")))
-    return (
+    detail = (
         f"{index}. {claim}\n"
         f"   -> {source_name} ({tier})\n"
         f"   -> {url}\n"
         f"   -> fetched: {fetched_at}"
     )
+    claim_id = _as_text(citation.get("claim_id"), default="")
+    if claim_id:
+        detail = f"{detail}\n   -> claim_id: {claim_id}"
+    return detail
 
 
 def _render_claim_aware_citations(citations: list[Mapping[str, Any]]) -> str:

@@ -42,7 +42,7 @@ def infer_tier(*, source_kind: str, url: str, source_registry: SourceRegistry) -
     normalized_kind = source_kind.lower()
     if normalized_kind in SUPPLEMENTARY_TIERS:
         return "supplementary"
-    if normalized_kind in PRIMARY_TIERS:
+    if normalized_kind in {"official", "platform"}:
         return "primary"
 
     parsed = urlparse(url)
