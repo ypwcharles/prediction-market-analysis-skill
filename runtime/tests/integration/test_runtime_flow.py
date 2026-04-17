@@ -117,12 +117,27 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
     assert all(row["status"] == "open" for row in clusters)
 
     expression_rows = conn.execute(
-        "SELECT condition_id, market_id, token_id FROM cluster_expressions ORDER BY market_id"
+        "SELECT condition_id, market_id, token_id, event_slug, market_slug FROM cluster_expressions ORDER BY market_id"
     ).fetchall()
-    assert [(row["condition_id"], row["market_id"], row["token_id"]) for row in expression_rows] == [
-        ("cond-live-b", "mkt-live-degraded", "token-live-degraded"),
-        ("cond-live-a", "mkt-live-tradable", "token-live-tradable"),
+    assert [
+        (row["condition_id"], row["market_id"], row["token_id"], row["event_slug"], row["market_slug"])
+        for row in expression_rows
+    ] == [
+        ("cond-live-b", "mkt-live-degraded", "token-live-degraded", "live-election-2026", "candidate-b-wins-live"),
+        ("cond-live-a", "mkt-live-tradable", "token-live-tradable", "live-election-2026", "candidate-a-wins-live"),
     ]
+    archive_text_by_market = {
+        row["market_id"]: Path(row["archive_path"]).read_text(encoding="utf-8")
+        for row in alerts
+    }
+    assert (
+        "market: https://polymarket.com/event/live-election-2026/candidate-a-wins-live"
+        in archive_text_by_market["mkt-live-tradable"]
+    )
+    assert (
+        "market: https://polymarket.com/event/live-election-2026/candidate-b-wins-live"
+        in archive_text_by_market["mkt-live-degraded"]
+    )
 
     claim_mappings = conn.execute(
         "SELECT claim_type, source_id FROM claim_source_mappings ORDER BY id"
@@ -136,6 +151,152 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
     assert len(triggers) == 2
     assert all(row["trigger_type"] == "price_reprice" for row in triggers)
     assert all(row["state"] == "armed" for row in triggers)
+
+
+def test_scan_command_loads_live_news_and_x_feeds_into_judgment_context(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    evidence_log = tmp_path / "evidence-log.jsonl"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID", "-100123456")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_NEWS_FEED_URL", str(FIXTURES / "news_samples.json"))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_X_FEED_URL", str(FIXTURES / "x_samples.json"))
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH", raising=False)
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_X_SAMPLES_PATH", raising=False)
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys,pathlib;"
+                    "payload=json.load(sys.stdin);"
+                    f"log_path=pathlib.Path({str(evidence_log)!r});"
+                    "handle=log_path.open('a',encoding='utf-8');"
+                    "handle.write(json.dumps(payload['context']['evidence'])+'\\n');"
+                    "handle.close();"
+                    "response={"
+                    "'alert_kind':'research',"
+                    "'cluster_action':'create',"
+                    "'ttl_hours':6,"
+                    "'summary':'feed evidence check',"
+                    "'watch_item':'keep watching',"
+                    "'citations':[],"
+                    "'triggers':[],"
+                    "'archive_payload':{'summary':'feed evidence check'}};"
+                    "json.dump(response,sys.stdout)"
+                ),
+            ]
+        ),
+    )
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_book(token_id: str) -> BookSnapshot:
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.49,
+            best_ask=0.51,
+            spread_bps=400.0,
+            slippage_bps=200.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+
+    assert main(["scan"]) == 0
+
+    evidence_rows = [
+        json.loads(line)
+        for line in evidence_log.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert evidence_rows
+    source_ids = {item["source_id"] for item in evidence_rows[0]}
+    assert {"reuters_001", "ap_002", "x_polymarket_001"} <= source_ids
+    assert "x_reporter_002" not in source_ids
+
+
+def test_scan_command_degrades_when_configured_evidence_feed_fails(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID", "-100123456")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_NEWS_FEED_URL",
+        str(tmp_path / "missing-news-feed.json"),
+    )
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH", raising=False)
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_X_FEED_URL", raising=False)
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_X_SAMPLES_PATH", raising=False)
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys;"
+                    "json.dump({"
+                    "'alert_kind':'strict',"
+                    "'cluster_action':'create',"
+                    "'ttl_hours':6,"
+                    "'thesis':'degraded evidence check',"
+                    "'side':'NO',"
+                    "'theoretical_edge_cents':15.0,"
+                    "'executable_edge_cents':11.0,"
+                    "'max_entry_cents':42.0,"
+                    "'suggested_size_usdc':150.0,"
+                    "'why_now':'strict candidate before evidence degradation handling',"
+                    "'kill_criteria_text':'official confirmation',"
+                    "'summary':'summary',"
+                    "'watch_item':'watch',"
+                    "'citations':[],"
+                    "'triggers':[],"
+                    "'archive_payload':{'summary':'archive'}"
+                    "},sys.stdout)"
+                ),
+            ]
+        ),
+    )
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_book(token_id: str) -> BookSnapshot:
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.49,
+            best_ask=0.51,
+            spread_bps=400.0,
+            slippage_bps=200.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+
+    assert main(["scan"]) == 0
+
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    run_row = conn.execute(
+        "SELECT id, status, degraded_reason FROM runs WHERE run_type = 'scan' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    assert run_row["status"] == "degraded"
+    assert "news_feed_failed:FileNotFoundError" in run_row["degraded_reason"]
+
+    alert_rows = conn.execute(
+        "SELECT alert_kind FROM alerts WHERE run_id = ? ORDER BY market_id",
+        [run_row["id"]],
+    ).fetchall()
+    assert alert_rows
+    assert all(row["alert_kind"] != "strict" for row in alert_rows)
+    assert any(row["alert_kind"] == "research" for row in alert_rows)
 
 
 def _seed_monitor_source_alert(paths) -> None:
@@ -155,6 +316,28 @@ def _seed_monitor_source_alert(paths) -> None:
         VALUES (?, ?, ?, ?, ?)
         """,
         ["cluster-source", "Source thesis", "open", now_iso, now_iso],
+    )
+    conn.execute(
+        """
+        INSERT INTO cluster_expressions (
+            id, thesis_cluster_id, condition_id, event_id, market_id, token_id,
+            event_slug, market_slug, expression_label, is_primary_expression, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "expr-source",
+            "cluster-source",
+            "cond-source",
+            "event-source",
+            "market-source",
+            "token-source",
+            "source-event",
+            "source-market",
+            "source expression",
+            1,
+            now_iso,
+            now_iso,
+        ],
     )
     conn.execute(
         """
@@ -336,6 +519,7 @@ def test_execute_monitor_flow_delivers_pending_recheck_after_llm_approval(monkey
 
     assert len(summary.delivered_alert_ids) == 1
     assert len(delivered_messages) == 1
+    assert "market: https://polymarket.com/event/source-event/source-market" in delivered_messages[0]
     assert recheck_log.exists()
     payload_rows = [json.loads(line) for line in recheck_log.read_text(encoding="utf-8").splitlines()]
     assert len(payload_rows) == 1

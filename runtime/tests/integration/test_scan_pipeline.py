@@ -82,6 +82,12 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     assert result.outcome.coverage.total_events == 1
     assert result.outcome.coverage.total_candidates == 2
     assert [seed.market_id for seed in result.alert_seeds] == ["mkt-live-tradable", "mkt-live-degraded"]
+    assert [seed.event_slug for seed in result.alert_seeds] == ["live-election-2026", "live-election-2026"]
+    assert [seed.market_slug for seed in result.alert_seeds] == ["candidate-a-wins-live", "candidate-b-wins-live"]
+    assert [seed.market_link for seed in result.alert_seeds] == [
+        "https://polymarket.com/event/live-election-2026/candidate-a-wins-live",
+        "https://polymarket.com/event/live-election-2026/candidate-b-wins-live",
+    ]
     assert result.alert_seeds[0].judgment_seed == {"thesis": "candidate-a-momentum"}
     assert result.alert_seeds[1].judgment_seed is None
     assert result.alert_seeds[1].evidence_seeds == ({"source": "news", "url": "https://example.com/news"},)

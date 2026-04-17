@@ -30,6 +30,8 @@ class RuntimeConfig:
     telegram_chat_id: str | None
     judgment_command: tuple[str, ...]
     judgment_timeout_seconds: int
+    news_feed_url: str | None
+    x_feed_url: str | None
     news_samples_path: Path | None
     x_samples_path: Path | None
 
@@ -91,6 +93,8 @@ def load_runtime_config() -> RuntimeConfig:
         judgment_timeout_seconds=int(
             os.environ.get("POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS", "90")
         ),
+        news_feed_url=_optional_env("POLYMARKET_ALERT_BOT_NEWS_FEED_URL"),
+        x_feed_url=_optional_env("POLYMARKET_ALERT_BOT_X_FEED_URL"),
         news_samples_path=_optional_path("POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH"),
         x_samples_path=_optional_path("POLYMARKET_ALERT_BOT_X_SAMPLES_PATH"),
     )

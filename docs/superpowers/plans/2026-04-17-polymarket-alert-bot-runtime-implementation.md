@@ -914,7 +914,7 @@ Expected:
 - at least one run row written
 - telegram delivery path can be disabled or mocked via env
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add runtime docs/README.md .gitignore docs/superpowers/plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md

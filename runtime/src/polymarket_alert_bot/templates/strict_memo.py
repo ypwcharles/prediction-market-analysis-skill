@@ -59,12 +59,17 @@ def render_strict_memo(payload: Mapping[str, Any]) -> str:
         citations = []
     claim_citations = [item for item in citations if isinstance(item, Mapping)]
 
-    return "\n".join(
+    lines = [
+        f"[{mode}]",
+        f"thesis: {_as_text(payload.get('thesis'))}",
+        f"cluster: {_as_text(payload.get('thesis_cluster_id'))}",
+        f"expression: {_as_text(payload.get('expression'))}",
+    ]
+    market_link = _as_text(payload.get("market_link"), default="")
+    if market_link:
+        lines.append(f"market: {market_link}")
+    lines.extend(
         [
-            f"[{mode}]",
-            f"thesis: {_as_text(payload.get('thesis'))}",
-            f"cluster: {_as_text(payload.get('thesis_cluster_id'))}",
-            f"expression: {_as_text(payload.get('expression'))}",
             (
                 "action: "
                 f"{_as_text(payload.get('side'))} <= {_format_price(payload.get('max_entry_cents'))} "
@@ -82,3 +87,4 @@ def render_strict_memo(payload: Mapping[str, Any]) -> str:
             _render_claim_aware_citations(claim_citations),
         ]
     )
+    return "\n".join(lines)

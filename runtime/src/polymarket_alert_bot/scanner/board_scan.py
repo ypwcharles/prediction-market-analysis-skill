@@ -16,6 +16,7 @@ from polymarket_alert_bot.scanner.clob_client import (
     fetch_book,
 )
 from polymarket_alert_bot.scanner.gamma_client import fetch_events, normalize_events
+from polymarket_alert_bot.scanner.market_link import build_polymarket_market_url
 from polymarket_alert_bot.scanner.normalizer import ScanCandidate, normalize_candidates
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
@@ -65,6 +66,9 @@ class AlertSeed:
     market_id: str
     token_id: str
     condition_id: str | None
+    event_slug: str | None
+    market_slug: str | None
+    market_link: str | None
     alert_kind: str
     dedupe_key: str
     expression_key: str
@@ -299,6 +303,12 @@ def _build_alert_seeds(
                 market_id=candidate.market_id,
                 token_id=candidate.token_id,
                 condition_id=candidate.condition_id,
+                event_slug=candidate.event_slug,
+                market_slug=candidate.market_slug,
+                market_link=build_polymarket_market_url(
+                    event_slug=candidate.event_slug,
+                    market_slug=candidate.market_slug,
+                ),
                 alert_kind=alert_kind,
                 dedupe_key=f"scanner-seed::{candidate.expression_key}",
                 expression_key=candidate.expression_key,

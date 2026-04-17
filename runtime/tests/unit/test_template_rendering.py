@@ -91,6 +91,45 @@ def test_render_monitor_alert_snapshot() -> None:
     _assert_snapshot("monitor_alert.txt", render_monitor_alert(payload))
 
 
+def test_render_strict_memo_includes_market_link_when_present() -> None:
+    rendered = render_strict_memo(
+        {
+            "mode": "STRICT",
+            "thesis": "test thesis",
+            "thesis_cluster_id": "cluster-test",
+            "expression": "test expression",
+            "market_link": "https://polymarket.com/event/test-event/test-market",
+        }
+    )
+    assert "market: https://polymarket.com/event/test-event/test-market" in rendered
+
+
+def test_render_research_digest_includes_market_link_when_present() -> None:
+    rendered = render_research_digest(
+        {
+            "thesis": "test thesis",
+            "summary": "test summary",
+            "watch_item": "test watch",
+            "market_link": "https://polymarket.com/event/test-event",
+        }
+    )
+    assert "market: https://polymarket.com/event/test-event" in rendered
+
+
+def test_render_monitor_alert_includes_market_link_when_present() -> None:
+    rendered = render_monitor_alert(
+        {
+            "thesis": "test thesis",
+            "trigger_type": "price_reprice",
+            "trigger_state": "fired",
+            "observation": "test observation",
+            "suggested_action": "test action",
+            "market_link": "https://polymarket.com/event/test-event/test-market",
+        }
+    )
+    assert "market: https://polymarket.com/event/test-event/test-market" in rendered
+
+
 def test_render_heartbeat_snapshot() -> None:
     payload = {
         "degraded": True,

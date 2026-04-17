@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-import json
 from pathlib import Path
 from typing import Any, Iterable
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -16,6 +15,7 @@ from polymarket_alert_bot.judgment.context_builder import build_judgment_context
 from polymarket_alert_bot.judgment.result_parser import ParsedJudgment, Trigger
 from polymarket_alert_bot.judgment.skill_adapter import SkillAdapter
 from polymarket_alert_bot.monitor.position_sync import run_monitor
+from polymarket_alert_bot.scanner.market_link import build_polymarket_market_url
 from polymarket_alert_bot.scanner.board_scan import AlertSeed, run_scan
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem, enrich_evidence
 from polymarket_alert_bot.sources.news_client import NewsClient
@@ -44,6 +44,12 @@ class MonitorFlowSummary:
     stale_alert_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class EvidenceLoadResult:
+    items: tuple[EvidenceItem, ...]
+    degraded_reasons: tuple[str, ...]
+
+
 def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | None = None) -> ScanFlowSummary:
     config = runtime_config or load_runtime_config()
     scan_result = run_scan(paths)
@@ -53,7 +59,13 @@ def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | No
     registry = load_source_registry(paths.sources_path)
     now_iso = _now_iso()
     _sync_source_registry(repository, registry, now_iso=now_iso)
-    configured_evidence = _load_configured_evidence(config)
+    evidence_result = _load_configured_evidence(config, registry=registry)
+    configured_evidence = evidence_result.items
+    evidence_degraded = bool(evidence_result.degraded_reasons)
+    combined_degraded_reason = _combine_degraded_reason(
+        scan_result.degraded_reason,
+        *evidence_result.degraded_reasons,
+    )
 
     skill = SkillAdapter(
         timeout_seconds=config.judgment_timeout_seconds,
@@ -77,6 +89,7 @@ def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | No
             parsed,
             seed,
             strict_allowed=_is_strict_allowed(seed, configured_evidence, registry),
+            evidence_degraded=evidence_degraded,
         )
         cluster_id = _stable_cluster_id(seed, parsed)
         fresh_until, recheck_at = _resolve_timers(parsed, seed_now)
@@ -170,8 +183,8 @@ def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | No
                 "strict_count": len(strict_alert_ids),
                 "research_count": len(research_alert_ids),
                 "skipped_count": scan_result.outcome.coverage.skipped,
-                "degraded": scan_result.status == "degraded",
-                "degraded_reason": scan_result.degraded_reason,
+                "degraded": scan_result.status == "degraded" or evidence_degraded,
+                "degraded_reason": combined_degraded_reason,
             }
         )
         archive_path = write_archive_artifact(
@@ -225,8 +238,8 @@ def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | No
             scan_result.outcome.coverage.skipped,
             1 if heartbeat_alert_id else 0,
             _now_iso(),
-            scan_result.degraded_reason,
-            scan_result.status,
+            combined_degraded_reason,
+            "degraded" if scan_result.status == "degraded" or evidence_degraded else scan_result.status,
             scan_result.run_id,
         ],
     )
@@ -247,7 +260,8 @@ def execute_monitor_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig |
     apply_migrations(conn)
     repository = RuntimeRepository(conn)
     registry = load_source_registry(paths.sources_path)
-    configured_evidence = _load_configured_evidence(config)
+    evidence_result = _load_configured_evidence(config, registry=registry)
+    configured_evidence = evidence_result.items
     skill = SkillAdapter(
         timeout_seconds=config.judgment_timeout_seconds,
         external_command=list(config.judgment_command) or None,
@@ -259,6 +273,7 @@ def execute_monitor_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig |
         source_alert = repository.get_alert(str(payload["alert_id"]))
         if source_alert is None:
             continue
+        source_market_link = _resolve_alert_market_link(conn, source_alert)
         monitor_alert_id = _deliver_monitor_action(
             repository=repository,
             config=config,
@@ -266,6 +281,7 @@ def execute_monitor_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig |
             source_alert=source_alert,
             payload=payload,
             now_iso=now_iso,
+            market_link=source_market_link,
         )
         delivered_alert_ids.append(monitor_alert_id)
 
@@ -283,6 +299,7 @@ def execute_monitor_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig |
         )
         if not _monitor_recheck_allows_delivery(parsed):
             continue
+        source_market_link = _resolve_alert_market_link(conn, source_alert)
         monitor_alert_id = _deliver_monitor_action(
             repository=repository,
             config=config,
@@ -290,6 +307,7 @@ def execute_monitor_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig |
             source_alert=source_alert,
             payload=payload,
             now_iso=now_iso,
+            market_link=source_market_link,
         )
         delivered_alert_ids.append(monitor_alert_id)
 
@@ -328,18 +346,22 @@ def _is_strict_allowed(seed: AlertSeed, configured_evidence: Iterable[EvidenceIt
     return enrich_evidence(evidence_items, registry).strict_allowed
 
 
-def _load_configured_evidence(config: RuntimeConfig) -> list[EvidenceItem]:
+def _load_configured_evidence(config: RuntimeConfig, *, registry) -> EvidenceLoadResult:
     evidence: list[EvidenceItem] = []
-    if config.news_samples_path:
-        evidence.extend(NewsClient().normalize_items(_load_json_rows(config.news_samples_path)))
-    if config.x_samples_path:
-        evidence.extend(XClient().normalize_items(_load_json_rows(config.x_samples_path)))
-    return evidence
-
-
-def _load_json_rows(path: Path) -> list[dict[str, object]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return payload if isinstance(payload, list) else []
+    degraded_reasons: list[str] = []
+    news_source = config.news_feed_url or config.news_samples_path
+    if news_source:
+        try:
+            evidence.extend(NewsClient().fetch_items(news_source))
+        except Exception as exc:
+            degraded_reasons.append(f"news_feed_failed:{exc.__class__.__name__}")
+    x_source = config.x_feed_url or config.x_samples_path
+    if x_source:
+        try:
+            evidence.extend(XClient().fetch_items(x_source, allowed_handles=registry.x_handles))
+        except Exception as exc:
+            degraded_reasons.append(f"x_feed_failed:{exc.__class__.__name__}")
+    return EvidenceLoadResult(items=tuple(evidence), degraded_reasons=tuple(degraded_reasons))
 
 
 def _merge_evidence(seed: AlertSeed, configured_items: Iterable[EvidenceItem]) -> list[EvidenceItem]:
@@ -361,12 +383,18 @@ def _merge_evidence(seed: AlertSeed, configured_items: Iterable[EvidenceItem]) -
     return merged
 
 
-def _finalize_alert_kind(parsed: ParsedJudgment, seed: AlertSeed, *, strict_allowed: bool) -> str:
+def _finalize_alert_kind(
+    parsed: ParsedJudgment,
+    seed: AlertSeed,
+    *,
+    strict_allowed: bool,
+    evidence_degraded: bool = False,
+) -> str:
     desired = parsed.alert_kind
     if desired in {"strict", "strict_degraded", "reprice"}:
         if not strict_allowed:
             return "research"
-        if seed.is_degraded:
+        if seed.is_degraded or evidence_degraded:
             return "strict_degraded"
     return desired
 
@@ -394,11 +422,18 @@ def _build_render_payload(
     recheck_at: str | None,
     cluster_id: str,
 ) -> dict[str, Any]:
+    market_link = seed.market_link or build_polymarket_market_url(
+        event_slug=seed.event_slug,
+        market_slug=seed.market_slug,
+    )
     return {
         "mode": "STRICT-DEGRADED" if final_kind == "strict_degraded" else final_kind.upper().replace("_", "-"),
         "thesis": parsed.thesis or seed.expression_summary,
         "thesis_cluster_id": cluster_id,
         "expression": seed.expression_summary,
+        "event_slug": seed.event_slug,
+        "market_slug": seed.market_slug,
+        "market_link": market_link,
         "side": parsed.side or "NO",
         "theoretical_edge_cents": parsed.theoretical_edge_cents,
         "executable_edge_cents": parsed.executable_edge_cents,
@@ -447,8 +482,8 @@ def _upsert_cluster_state(
             "event_id": seed.event_id,
             "market_id": seed.market_id,
             "token_id": seed.token_id,
-            "event_slug": None,
-            "market_slug": None,
+            "event_slug": seed.event_slug,
+            "market_slug": seed.market_slug,
             "expression_label": seed.expression_summary,
             "is_primary_expression": 1,
             "first_seen_at": now_iso,
@@ -569,6 +604,9 @@ def _seed_candidate_facts(seed: AlertSeed) -> dict[str, Any]:
         "market_id": seed.market_id,
         "token_id": seed.token_id,
         "condition_id": seed.condition_id,
+        "event_slug": seed.event_slug,
+        "market_slug": seed.market_slug,
+        "market_link": seed.market_link,
         "expression_summary": seed.expression_summary,
         "expression_key": seed.expression_key,
         "rules_text": seed.rules_text or "",
@@ -641,6 +679,7 @@ def _deliver_monitor_action(
     source_alert,
     payload: dict[str, object],
     now_iso: str,
+    market_link: str | None,
 ) -> str:
     monitor_alert_id = str(uuid4())
     message = render_monitor_alert(
@@ -648,6 +687,7 @@ def _deliver_monitor_action(
             "thesis": source_alert["why_now"] or source_alert["thesis_cluster_id"] or "-",
             "trigger": payload,
             "suggested_action": payload["suggested_action"],
+            "market_link": market_link,
         }
     )
     message_ref = _deliver_message(
@@ -711,6 +751,7 @@ def _judge_monitor_recheck(
             "event_id": source_alert["event_id"],
             "market_id": source_alert["market_id"],
             "token_id": source_alert["token_id"],
+            "market_link": _resolve_alert_market_link(conn, source_alert),
             "trigger_id": payload["trigger_id"],
             "trigger_type": payload["trigger_type"],
             "trigger_state": payload.get("trigger_state"),
@@ -750,6 +791,46 @@ def _build_monitor_recheck_rules_text(source_alert) -> str:
 
 def _monitor_recheck_allows_delivery(parsed: ParsedJudgment) -> bool:
     return parsed.alert_kind in {"strict", "strict_degraded", "reprice", "monitor"}
+
+
+def _combine_degraded_reason(*parts: str | None) -> str | None:
+    normalized: list[str] = []
+    for part in parts:
+        if part is None:
+            continue
+        text = str(part).strip()
+        if text and text not in normalized:
+            normalized.append(text)
+    return ";".join(normalized) if normalized else None
+
+
+def _resolve_alert_market_link(conn, alert_row) -> str | None:
+    row_keys = set(alert_row.keys())
+    if "event_slug" in row_keys or "market_slug" in row_keys:
+        direct_link = build_polymarket_market_url(
+            event_slug=alert_row["event_slug"] if "event_slug" in row_keys else None,
+            market_slug=alert_row["market_slug"] if "market_slug" in row_keys else None,
+        )
+        if direct_link:
+            return direct_link
+
+    row = conn.execute(
+        """
+        SELECT event_slug, market_slug
+        FROM cluster_expressions
+        WHERE market_id = ?
+           OR (thesis_cluster_id = ? AND condition_id = ?)
+        ORDER BY is_primary_expression DESC, last_seen_at DESC
+        LIMIT 1
+        """,
+        [alert_row["market_id"], alert_row["thesis_cluster_id"], alert_row["condition_id"]],
+    ).fetchone()
+    if row is None:
+        return None
+    return build_polymarket_market_url(
+        event_slug=row["event_slug"],
+        market_slug=row["market_slug"],
+    )
 
 
 def _now_iso() -> str:

@@ -29,13 +29,19 @@ def render_research_digest(payload: Mapping[str, Any]) -> str:
         if claim_citations
         else "1. No claim-aware citation was provided."
     )
-    return "\n".join(
+    lines = [
+        "[RESEARCH]",
+        f"thesis: {_as_text(payload.get('thesis'))}",
+        f"summary: {_as_text(payload.get('summary'))}",
+        f"watch: {_as_text(payload.get('watch_item'))}",
+    ]
+    market_link = _as_text(payload.get("market_link"), default="")
+    if market_link:
+        lines.append(f"market: {market_link}")
+    lines.extend(
         [
-            "[RESEARCH]",
-            f"thesis: {_as_text(payload.get('thesis'))}",
-            f"summary: {_as_text(payload.get('summary'))}",
-            f"watch: {_as_text(payload.get('watch_item'))}",
             "citations (claim-aware):",
             citation_lines,
         ]
     )
+    return "\n".join(lines)

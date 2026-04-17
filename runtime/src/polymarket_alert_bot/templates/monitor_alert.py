@@ -72,6 +72,9 @@ def render_monitor_alert(payload: Mapping[str, Any]) -> str:
         f"observation: {observation}",
         f"suggested action: {suggested_action}",
     ]
+    market_link = _as_text(payload.get("market_link"), default="")
+    if market_link:
+        lines.append(f"market: {market_link}")
     if trigger_ref or fired_at:
         lines.append(f"trigger ref: id={_as_text(trigger_ref)} | fired_at={_as_text(fired_at)}")
 
