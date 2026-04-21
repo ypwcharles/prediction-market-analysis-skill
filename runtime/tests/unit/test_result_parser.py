@@ -254,7 +254,10 @@ def test_skill_adapter_external_command_runner_success() -> None:
     assert parsed.archive_payload["echo_contract"] == CONTRACT_VERSION
 
 
-def test_skill_adapter_degrades_when_no_runner_is_configured() -> None:
+def test_skill_adapter_degrades_when_no_runner_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD", raising=False)
     adapter = SkillAdapter()
 
     parsed = adapter.judge({"candidate_facts": {"market_id": "m1"}})

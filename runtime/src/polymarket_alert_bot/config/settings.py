@@ -44,6 +44,7 @@ class RuntimeConfig:
     scan_interval_seconds: int
     monitor_interval_seconds: int
     report_interval_seconds: int
+    scan_max_judgment_candidates: int
 
 
 def load_runtime_paths() -> RuntimePaths:
@@ -88,7 +89,7 @@ def load_runtime_config() -> RuntimeConfig:
     return RuntimeConfig(
         gamma_events_url=os.environ.get(
             "POLYMARKET_ALERT_BOT_GAMMA_EVENTS_URL",
-            "https://gamma-api.polymarket.com/events",
+            "https://gamma-api.polymarket.com/markets",
         ),
         gamma_limit=int(os.environ.get("POLYMARKET_ALERT_BOT_GAMMA_LIMIT", "200")),
         clob_book_url=os.environ.get(
@@ -103,7 +104,7 @@ def load_runtime_config() -> RuntimeConfig:
         telegram_chat_id=_optional_env("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID"),
         judgment_command=judgment_command,
         judgment_timeout_seconds=int(
-            os.environ.get("POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS", "300")
+            os.environ.get("POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS", "600")
         ),
         news_feed_url=_optional_env("POLYMARKET_ALERT_BOT_NEWS_FEED_URL"),
         x_feed_url=_optional_env("POLYMARKET_ALERT_BOT_X_FEED_URL"),
@@ -140,6 +141,9 @@ def load_runtime_config() -> RuntimeConfig:
         ),
         report_interval_seconds=int(
             os.environ.get("POLYMARKET_ALERT_BOT_REPORT_INTERVAL_SECONDS", "86400")
+        ),
+        scan_max_judgment_candidates=int(
+            os.environ.get("POLYMARKET_ALERT_BOT_SCAN_MAX_JUDGMENT_CANDIDATES", "2")
         ),
     )
 

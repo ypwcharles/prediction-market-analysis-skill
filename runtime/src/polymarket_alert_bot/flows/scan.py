@@ -53,7 +53,7 @@ def execute_scan_flow(
     paths: RuntimePaths, *, runtime_config: RuntimeConfig | None = None
 ) -> ScanFlowSummary:
     config = runtime_config or load_runtime_config()
-    scan_result = run_scan(paths)
+    scan_result = run_scan(paths, max_judgment_candidates=config.scan_max_judgment_candidates)
     conn = connect_db(paths.db_path)
     apply_migrations(conn)
     repository = RuntimeRepository(conn)

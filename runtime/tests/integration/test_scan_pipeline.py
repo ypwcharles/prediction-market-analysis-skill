@@ -127,7 +127,9 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
 def test_run_scan_live_uses_runtime_config_urls_and_limit(monkeypatch, tmp_path):
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
-    monkeypatch.setenv("POLYMARKET_ALERT_BOT_GAMMA_EVENTS_URL", "https://gamma.example.test/events")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_GAMMA_EVENTS_URL", "https://gamma.example.test/markets"
+    )
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_GAMMA_LIMIT", "77")
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_CLOB_BOOK_URL", "https://clob.example.test/book")
     paths = load_runtime_paths()
@@ -138,10 +140,12 @@ def test_run_scan_live_uses_runtime_config_urls_and_limit(monkeypatch, tmp_path)
     observed_gamma_limit: int | None = None
     observed_book_calls: list[tuple[str, str]] = []
 
-    def _fake_fetch_events(*, url: str, limit: int):
+    def _fake_fetch_events(*, url: str, limit: int, active: bool = True, closed: bool = False):
         nonlocal observed_gamma_url, observed_gamma_limit
         observed_gamma_url = url
         observed_gamma_limit = limit
+        assert active is True
+        assert closed is False
         return gamma_payload
 
     def _fake_fetch_book(token_id: str, *, url: str) -> BookSnapshot:
@@ -153,7 +157,7 @@ def test_run_scan_live_uses_runtime_config_urls_and_limit(monkeypatch, tmp_path)
 
     result = run_scan(paths)
 
-    assert observed_gamma_url == "https://gamma.example.test/events"
+    assert observed_gamma_url == "https://gamma.example.test/markets"
     assert observed_gamma_limit == 77
     assert observed_book_calls == [
         ("token-live-tradable", "https://clob.example.test/book"),
@@ -162,3 +166,65 @@ def test_run_scan_live_uses_runtime_config_urls_and_limit(monkeypatch, tmp_path)
     assert result.status == "degraded"
     assert result.degraded_reason == "executable_checks_partial"
     assert result.outcome.coverage.degraded_books == 2
+
+
+def test_run_scan_caps_judgment_candidates_by_priority(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+
+    gamma_payload = [
+        {
+            "id": "event-1",
+            "slug": "event-one",
+            "description": "Event one",
+            "markets": [
+                {
+                    "id": "market-low",
+                    "slug": "market-low",
+                    "question": "New celebrity album before GTA VI?",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-low",
+                    "liquidity": 15000,
+                    "token_id": "token-low",
+                },
+                {
+                    "id": "market-high",
+                    "slug": "market-high",
+                    "question": "Will bitcoin hit $1m before GTA VI?",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-high",
+                    "liquidity": 9000,
+                    "token_id": "token-high",
+                },
+            ],
+        }
+    ]
+    clob_payload = {
+        "books": [
+            {
+                "token_id": "token-low",
+                "bids": [{"price": "0.40"}],
+                "asks": [{"price": "0.42"}],
+            },
+            {
+                "token_id": "token-high",
+                "bids": [{"price": "0.40"}],
+                "asks": [{"price": "0.41"}],
+            },
+        ]
+    }
+
+    result = run_scan(
+        paths,
+        gamma_payload=gamma_payload,
+        clob_payload=clob_payload,
+        max_judgment_candidates=1,
+    )
+
+    assert len(result.alert_seeds) == 1
+    assert result.alert_seeds[0].market_id == "market-high"
+
+    assert result.alert_seeds[0].market_id == "market-high"

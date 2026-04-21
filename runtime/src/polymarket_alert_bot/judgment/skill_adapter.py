@@ -26,7 +26,7 @@ class SkillAdapter:
         self,
         *,
         runner: SkillRunner | None = None,
-        timeout_seconds: int = 300,
+        timeout_seconds: int = 600,
         external_command: list[str] | str | None = None,
         external_runner: ExternalCommandRunner | None = None,
     ) -> None:
