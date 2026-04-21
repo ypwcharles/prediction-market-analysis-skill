@@ -50,6 +50,7 @@ class FeedbackEvent:
     telegram_message_id: str | None
     inline_message_id: str | None
     message_thread_id: str | None
+    message_text: str | None
     payload: dict[str, Any]
     callback_answer: str
 
@@ -118,6 +119,7 @@ class CallbackRouter:
         telegram_chat_id = self._optional_text(chat.get("id"))
         telegram_message_id = self._optional_text(message.get("message_id"))
         message_thread_id = self._optional_text(message.get("message_thread_id"))
+        message_text = self._optional_text(message.get("text")) or self._optional_text(message.get("caption"))
         update_id = self._optional_text(update.get("update_id"))
         from_payload = callback_query.get("from")
         if not isinstance(from_payload, Mapping):
@@ -138,10 +140,12 @@ class CallbackRouter:
             telegram_message_id=telegram_message_id,
             inline_message_id=inline_message_id,
             message_thread_id=message_thread_id,
+            message_text=message_text,
             payload={
                 "callback_data": callback_data,
                 "from_user_id": from_user_id,
                 "callback_answer": callback_answer,
+                "message_text": message_text,
                 "message_ref": {
                     "chat_id": telegram_chat_id,
                     "message_id": telegram_message_id,

@@ -4,7 +4,9 @@
 
 **Goal:** Build the first runnable Polymarket alert-bot runtime inside this repo, with scheduled scanning, Telegram delivery, action-oriented monitoring, SQLite state, calibration reporting, and archive support, while keeping `skills/prediction-market-analysis/` as a pure judgment engine.
 
-**Ops Model Update (2026-04-20):** The original 2026-04-17 plan assumed Hermes/OpenClaw would remain the runtime shell. That assumption is superseded by the approved Docker-first service-shell delta in [2026-04-20-polymarket-alert-bot-runtime-ops-delta.md](/Users/peiwenyang/Development/polymarket-research/docs/design-and-plans/2026-04-20-polymarket-alert-bot-runtime-ops-delta.md). This implementation plan now treats the alert bot itself as the long-running runtime shell, while Hermes/OpenClaw become optional operator clients.
+**Latest live validation:** The temporary public-HTTPS and Telegram callback validation run from 2026-04-21 is recorded in [2026-04-21-polymarket-alert-bot-runtime-live-validation.md](2026-04-21-polymarket-alert-bot-runtime-live-validation.md).
+
+**Ops Model Update (2026-04-20):** The original 2026-04-17 plan assumed Hermes/OpenClaw would remain the runtime shell. That assumption is superseded by the approved Docker-first service-shell delta in [2026-04-20-polymarket-alert-bot-runtime-ops-delta.md](2026-04-20-polymarket-alert-bot-runtime-ops-delta.md). This implementation plan now treats the alert bot itself as the long-running runtime shell, while Hermes/OpenClaw become optional operator clients.
 
 **Architecture:** The runtime lives under a dedicated `runtime/` subtree and is `Python-first`. A single Dockerized runtime service owns scheduling, Telegram send path, Telegram webhook ingress, SQLite state, archive/report output, and a thin authenticated HTTP control plane. Internally, the service still reuses the existing `scan`, `monitor`, `report`, `callback`, and `promote` flow boundaries. Human-readable high-value artifacts are archived privately, while promoted public notes remain separate in `docs/market-analysis/`.
 

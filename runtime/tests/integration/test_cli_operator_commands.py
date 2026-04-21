@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 
 from polymarket_alert_bot.cli import main
+from polymarket_alert_bot.delivery.telegram_client import TelegramMessageRef
+from polymarket_alert_bot import runtime_flow
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 
@@ -164,6 +166,88 @@ def test_callback_seen_acknowledges_fired_trigger(tmp_path, monkeypatch):
         "SELECT state FROM triggers WHERE id = 'trigger-ack'"
     ).fetchone()
     assert trigger_row["state"] == "acknowledged"
+
+
+def test_callback_seen_edits_message_for_visible_confirmation(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    apply_migrations(conn)
+    _seed_alert_context(conn, alert_id="alert-visible", run_id="run-visible", cluster_id="cluster-visible")
+    conn.commit()
+
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class FakeTelegramClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def answer_callback_query(self, **kwargs):
+            calls.append(("answer_callback_query", kwargs))
+            return True
+
+        def clear_message_keyboard(self, **kwargs):
+            calls.append(("clear_message_keyboard", kwargs))
+            return True
+
+        def edit_message(self, **kwargs):
+            calls.append(("edit_message", kwargs))
+            return True
+
+        def send_message(self, **kwargs):
+            calls.append(("send_message", kwargs))
+            return TelegramMessageRef(chat_id=str(kwargs["chat_id"]), message_id="fallback-1")
+
+    monkeypatch.setattr(runtime_flow, "TelegramClient", FakeTelegramClient)
+
+    payload_path = tmp_path / "ack-visible.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "callback_query": {
+                    "id": "cb-visible",
+                    "data": "fb:ack:alert-visible:cluster-visible",
+                    "message": {
+                        "message_id": 58,
+                        "chat": {"id": -100123456},
+                        "text": "STRICT memo body",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["callback", "--payload-file", str(payload_path)]) == 0
+
+    assert calls == [
+        (
+            "answer_callback_query",
+            {
+                "callback_query_id": "cb-visible",
+                "text": "收到，已标记为已看。",
+            },
+        ),
+        (
+            "clear_message_keyboard",
+            {
+                "chat_id": "-100123456",
+                "message_id": "58",
+            },
+        ),
+        (
+            "edit_message",
+            {
+                "chat_id": "-100123456",
+                "message_id": "58",
+                "text": "STRICT memo body\n\n反馈状态：已看",
+            },
+        ),
+    ]
 
 
 def test_callback_close_thesis_closes_cluster_and_triggers(tmp_path, monkeypatch):

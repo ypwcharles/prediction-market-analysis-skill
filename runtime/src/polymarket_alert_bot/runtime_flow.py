@@ -379,6 +379,7 @@ def execute_callback_flow(
                 callback_query_id=event.callback_query_id,
                 text=event.callback_answer,
             )
+            _confirm_callback_feedback(telegram=telegram, event=event)
 
     return CallbackFlowSummary(
         alert_id=event.alert_id,
@@ -477,6 +478,45 @@ def _apply_feedback_side_effects(conn, *, event, alert_row, thesis_cluster_id: s
             [now_iso, now_iso, event.alert_id],
         )
     conn.commit()
+
+
+def _confirm_callback_feedback(*, telegram: TelegramClient, event) -> None:
+    if not event.telegram_chat_id:
+        return
+
+    status_line = _callback_status_line(event.action_label)
+    keyboard_cleared = False
+    if event.telegram_message_id:
+        keyboard_cleared = telegram.clear_message_keyboard(
+            chat_id=event.telegram_chat_id,
+            message_id=event.telegram_message_id,
+        )
+        if event.message_text:
+            updated_text = _append_callback_status_line(event.message_text, status_line)
+            edited = telegram.edit_message(
+                chat_id=event.telegram_chat_id,
+                message_id=event.telegram_message_id,
+                text=updated_text,
+            )
+            if edited:
+                return
+    if keyboard_cleared:
+        return
+    telegram.send_message(
+        chat_id=event.telegram_chat_id,
+        text=f"{status_line}\n已记录到 runtime。",
+    )
+
+
+def _callback_status_line(action_label: str) -> str:
+    return f"反馈状态：{action_label}"
+
+
+def _append_callback_status_line(message_text: str, status_line: str) -> str:
+    normalized = message_text.rstrip()
+    if status_line in normalized:
+        return normalized
+    return f"{normalized}\n\n{status_line}"
 
 
 def _judge_seed(

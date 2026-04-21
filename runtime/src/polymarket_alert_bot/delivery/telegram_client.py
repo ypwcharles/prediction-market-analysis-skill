@@ -141,6 +141,39 @@ class TelegramClient:
             parse_mode=parse_mode,
         )
 
+    def edit_message_reply_markup(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+        inline_keyboard: dict[str, Any] | None = None,
+    ) -> bool:
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": inline_keyboard if inline_keyboard is not None else {"inline_keyboard": []},
+        }
+        try:
+            return self._request("editMessageReplyMarkup", payload) is not None
+        except TelegramAPIError as exc:
+            if self._is_message_not_modified(exc):
+                return True
+            if self._is_edit_target_unavailable(exc):
+                return False
+            raise
+
+    def clear_message_keyboard(
+        self,
+        *,
+        chat_id: str,
+        message_id: str,
+    ) -> bool:
+        return self.edit_message_reply_markup(
+            chat_id=chat_id,
+            message_id=message_id,
+            inline_keyboard=None,
+        )
+
     def upsert_message(
         self,
         *,

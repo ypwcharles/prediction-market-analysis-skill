@@ -196,7 +196,6 @@ def test_telegram_webhook_requires_secret_and_routes_payload(tmp_path, monkeypat
     assert accepted.json()["callback_handled"] is True
     assert callback_payloads == [{"callback_query": {"id": "cb-1"}}]
 
-
 def test_telegram_webhook_offloads_callback_runner_to_worker_thread(tmp_path, monkeypatch):
     callback_thread_ids: list[int] = []
 
@@ -220,3 +219,24 @@ def test_telegram_webhook_offloads_callback_runner_to_worker_thread(tmp_path, mo
     assert response.status_code == 200
     assert callback_thread_ids
     assert callback_thread_ids[0] != threading.get_ident()
+
+
+def test_telegram_webhook_ignores_unsupported_updates(tmp_path, monkeypatch):
+    def callback_runner(_: dict[str, object]):
+        raise RuntimeError("unsupported callback payload")
+
+    app = _build_app(
+        tmp_path,
+        monkeypatch,
+        callback_runner=callback_runner,
+    )
+    ignored = _request(
+        app,
+        "POST",
+        "/telegram/webhook",
+        headers={TELEGRAM_SECRET_HEADER: TELEGRAM_WEBHOOK_SECRET},
+        json={"message": {"message_id": 1, "text": "/start"}},
+    )
+
+    assert ignored.status_code == 200
+    assert ignored.json() == {"ignored": True}

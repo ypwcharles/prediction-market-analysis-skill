@@ -190,6 +190,7 @@ def test_callback_router_extracts_update_and_message_refs_for_persistence() -> N
                 "message_id": 777,
                 "message_thread_id": 88,
                 "chat": {"id": -100333444, "type": "supergroup"},
+                "text": "STRICT alert body",
             },
         },
     }
@@ -198,12 +199,14 @@ def test_callback_router_extracts_update_and_message_refs_for_persistence() -> N
 
     assert event is not None
     assert event.update_id == "99001"
+    assert event.message_text == "STRICT alert body"
     assert event.payload["message_ref"] == {
         "chat_id": "-100333444",
         "message_id": "777",
         "message_thread_id": "88",
         "inline_message_id": "AgAAABBBCCC",
     }
+    assert event.payload["message_text"] == "STRICT alert body"
     assert event.payload["callback_answer"] == event.callback_answer
 
 
@@ -304,6 +307,31 @@ def test_telegram_client_edit_message_treats_not_modified_as_success() -> None:
         text="same text",
     )
     assert edited is True
+
+
+def test_telegram_client_clear_message_keyboard_sends_null_reply_markup() -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def request_fn(method: str, payload: dict[str, object]) -> dict[str, object]:
+        calls.append((method, payload))
+        return {"ok": True, "result": {"message_id": 55}}
+
+    cleared = TelegramClient(request_fn=request_fn).clear_message_keyboard(
+        chat_id="-100123",
+        message_id="55",
+    )
+
+    assert cleared is True
+    assert calls == [
+        (
+            "editMessageReplyMarkup",
+            {
+                "chat_id": "-100123",
+                "message_id": "55",
+                "reply_markup": {"inline_keyboard": []},
+            },
+        )
+    ]
 
 
 def test_telegram_client_answer_callback_query_treats_stale_query_as_false() -> None:

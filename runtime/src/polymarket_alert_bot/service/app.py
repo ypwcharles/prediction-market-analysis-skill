@@ -112,7 +112,15 @@ def create_app(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="callback payload must be a JSON object",
             )
-        result = await asyncio.to_thread(request.app.state.callback_runner, payload)
+        try:
+            result = await asyncio.to_thread(request.app.state.callback_runner, payload)
+        except RuntimeError as exc:
+            # Telegram delivers many update types to the same webhook URL.
+            # Only callback_query updates drive runtime state changes; other
+            # updates should be accepted and ignored to avoid Telegram retries.
+            if str(exc) == "unsupported callback payload":
+                return {"ignored": True}
+            raise
         return _serialize_result(result)
 
     return app
