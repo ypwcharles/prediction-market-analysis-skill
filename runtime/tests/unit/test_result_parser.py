@@ -190,6 +190,33 @@ def test_parse_judgment_result_accepts_list_trigger_payloads_from_real_hermes_ou
     assert parsed.archive_payload["trigger_metadata"]["condition_id"] == "cond-live-a"
 
 
+def test_parse_judgment_result_normalizes_structured_trigger_conditions() -> None:
+    payload = {
+        "alert_kind": "monitor",
+        "cluster_action": "hold",
+        "ttl_hours": 1,
+        "citations": [],
+        "triggers": [
+            {
+                "trigger_type": "rule_change_monitor",
+                "condition": {
+                    "watch": "rules_text_changes",
+                    "market_id": "mkt-live-tradable",
+                },
+            }
+        ],
+        "archive_payload": {},
+    }
+
+    parsed = parse_judgment_result(payload)
+
+    assert (
+        parsed.triggers[0].condition
+        == '{"market_id": "mkt-live-tradable", "watch": "rules_text_changes"}'
+    )
+    assert parsed.triggers[0].metadata["condition_payload"]["watch"] == "rules_text_changes"
+
+
 def test_parse_judgment_result_accepts_captured_real_hermes_monitor_output() -> None:
     payload = _load_fixture("real_hermes_monitor_output.json")
 

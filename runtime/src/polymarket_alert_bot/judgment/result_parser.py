@@ -91,15 +91,21 @@ class Trigger(BaseModel):
         if not isinstance(raw, dict):
             return raw
         payload = dict(raw)
+        metadata = payload.get("metadata")
+        if isinstance(metadata, dict):
+            metadata_payload = dict(metadata)
+        else:
+            metadata_payload = {}
         derived_kind = (
             payload.get("kind")
             or payload.get("trigger_type")
+            or payload.get("trigger_class")
             or payload.get("type")
             or payload.get("trigger_kind")
             or "generic"
         )
         payload.setdefault("kind", str(derived_kind))
-        derived_condition = (
+        raw_condition = (
             payload.get("condition")
             or payload.get("condition_text")
             or payload.get("rule")
@@ -107,7 +113,13 @@ class Trigger(BaseModel):
             or payload.get("threshold")
             or "unspecified"
         )
-        payload.setdefault("condition", str(derived_condition))
+        if isinstance(raw_condition, (dict, list)):
+            metadata_payload.setdefault("condition_payload", raw_condition)
+            derived_condition = json.dumps(raw_condition, ensure_ascii=False, sort_keys=True)
+        else:
+            derived_condition = str(raw_condition)
+        payload["condition"] = derived_condition
+        payload["metadata"] = metadata_payload
         payload.setdefault("trigger_type", payload.get("trigger_type") or payload.get("kind"))
         return payload
 

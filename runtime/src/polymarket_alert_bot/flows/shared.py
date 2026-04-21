@@ -261,6 +261,85 @@ def _persist_claim_mappings(
         )
 
 
+def _persisted_trigger_defaults(trigger: Trigger) -> dict[str, object]:
+    trigger_type = str(trigger.trigger_type or trigger.kind or "").strip().lower()
+    defaults: dict[str, dict[str, object]] = {
+        "price_reprice": {
+            "threshold_kind": "price",
+            "comparison": "<=",
+            "requires_llm_recheck": False,
+        },
+        "price_threshold": {
+            "threshold_kind": "execution_cost",
+            "comparison": "<=",
+            "requires_llm_recheck": True,
+        },
+        "evidence_freshness_expiry": {
+            "threshold_kind": "time",
+            "comparison": "<=",
+            "requires_llm_recheck": True,
+        },
+        "evidence_freshness": {
+            "threshold_kind": "time",
+            "comparison": ">=",
+            "requires_llm_recheck": True,
+        },
+        "rule_change": {
+            "threshold_kind": "narrative",
+            "comparison": "eq",
+            "requires_llm_recheck": True,
+        },
+        "rule_change_monitor": {
+            "threshold_kind": "narrative",
+            "comparison": "eq",
+            "requires_llm_recheck": True,
+        },
+        "catalyst_checkpoint": {
+            "threshold_kind": "narrative",
+            "comparison": "eq",
+            "requires_llm_recheck": True,
+        },
+        "market_data_recheck": {
+            "threshold_kind": "book_state",
+            "comparison": "state_change",
+            "requires_llm_recheck": False,
+        },
+        "narrative_reassessment": {
+            "threshold_kind": "narrative",
+            "comparison": "eq",
+            "requires_llm_recheck": True,
+        },
+        "narrative_recheck": {
+            "threshold_kind": "narrative",
+            "comparison": "eq",
+            "requires_llm_recheck": True,
+        },
+    }
+    return defaults.get(
+        trigger_type,
+        {
+            "threshold_kind": "price",
+            "comparison": "<=",
+            "requires_llm_recheck": False,
+        },
+    )
+
+
+def _persisted_trigger_threshold_value(trigger: Trigger) -> str:
+    if trigger.threshold not in (None, ""):
+        return str(trigger.threshold)
+    trigger_type = str(trigger.trigger_type or trigger.kind or "").strip().lower()
+    if trigger_type == "market_data_recheck":
+        return "quotes_available"
+    return str(trigger.condition)
+
+
+def _persisted_trigger_requires_recheck(trigger: Trigger) -> bool:
+    if "requires_llm_recheck" in trigger.metadata:
+        return bool(trigger.metadata["requires_llm_recheck"])
+    return bool(_persisted_trigger_defaults(trigger)["requires_llm_recheck"])
+
+
 def _replace_triggers(
     conn,
     repository: RuntimeRepository,
@@ -279,14 +358,13 @@ def _replace_triggers(
                 "thesis_cluster_id": thesis_cluster_id,
                 "alert_id": alert_id,
                 "trigger_type": trigger.trigger_type or trigger.kind,
-                "threshold_kind": trigger.metadata.get("threshold_kind") or "price",
-                "comparison": trigger.metadata.get("comparison") or "<=",
-                "threshold_value": str(trigger.threshold or trigger.condition),
+                "threshold_kind": trigger.metadata.get("threshold_kind")
+                or _persisted_trigger_defaults(trigger)["threshold_kind"],
+                "comparison": trigger.metadata.get("comparison")
+                or _persisted_trigger_defaults(trigger)["comparison"],
+                "threshold_value": _persisted_trigger_threshold_value(trigger),
                 "suggested_action": trigger.suggested_action or "Review",
-                "requires_llm_recheck": 1
-                if trigger.metadata.get("requires_llm_recheck")
-                or trigger.trigger_type == "narrative_reassessment"
-                else 0,
+                "requires_llm_recheck": 1 if _persisted_trigger_requires_recheck(trigger) else 0,
                 "human_note": trigger.condition,
                 "state": trigger.trigger_state or "armed",
                 "cooldown_until": None,
