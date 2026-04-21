@@ -59,8 +59,22 @@ def test_build_calibration_summary_respects_production_override(monkeypatch, tmp
     apply_migrations(conn)
     now = datetime.now(UTC).isoformat()
     _seed_base_context(conn, now=now, run_id="run-1", cluster_ids=["cluster-1", "cluster-2"])
-    _seed_alert(conn, alert_id="alert-1", run_id="run-1", cluster_id="cluster-1", alert_kind="strict", created_at=now)
-    _seed_alert(conn, alert_id="alert-2", run_id="run-1", cluster_id="cluster-2", alert_kind="reprice", created_at=now)
+    _seed_alert(
+        conn,
+        alert_id="alert-1",
+        run_id="run-1",
+        cluster_id="cluster-1",
+        alert_kind="strict",
+        created_at=now,
+    )
+    _seed_alert(
+        conn,
+        alert_id="alert-2",
+        run_id="run-1",
+        cluster_id="cluster-2",
+        alert_kind="reprice",
+        created_at=now,
+    )
     conn.commit()
 
     summary = build_calibration_summary(conn)
@@ -102,7 +116,9 @@ def _seed_base_context(conn, *, now: str, run_id: str, cluster_ids: list[str]) -
         )
 
 
-def _seed_alert(conn, *, alert_id: str, run_id: str, cluster_id: str, alert_kind: str, created_at: str) -> None:
+def _seed_alert(
+    conn, *, alert_id: str, run_id: str, cluster_id: str, alert_kind: str, created_at: str
+) -> None:
     conn.execute(
         """
         INSERT INTO alerts (
@@ -110,5 +126,14 @@ def _seed_alert(conn, *, alert_id: str, run_id: str, cluster_id: str, alert_kind
             status, dedupe_key, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [alert_id, run_id, cluster_id, alert_kind, "immediate", "active", f"dedupe-{alert_id}", created_at],
+        [
+            alert_id,
+            run_id,
+            cluster_id,
+            alert_kind,
+            "immediate",
+            "active",
+            f"dedupe-{alert_id}",
+            created_at,
+        ],
     )

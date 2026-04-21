@@ -75,7 +75,9 @@ def enrich_evidence(
                 url=str(item["url"]),
                 claim_snippet=str(item["claim_snippet"]),
                 tier=str(item.get("tier") or ""),
-                conflict_status=str(item["conflict_status"]) if item.get("conflict_status") else None,
+                conflict_status=str(item["conflict_status"])
+                if item.get("conflict_status")
+                else None,
             )
 
         inferred_tier = evidence.tier or infer_tier(

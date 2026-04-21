@@ -45,7 +45,9 @@ class NewsClient:
                     url=str(row["url"]),
                     claim_snippet=str(row["claim_snippet"]),
                     tier=str(row.get("tier") or ""),
-                    conflict_status=str(row["conflict_status"]) if row.get("conflict_status") else None,
+                    conflict_status=str(row["conflict_status"])
+                    if row.get("conflict_status")
+                    else None,
                 )
             )
         return normalized

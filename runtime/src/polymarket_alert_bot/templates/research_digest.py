@@ -25,7 +25,10 @@ def render_research_digest(payload: Mapping[str, Any]) -> str:
         citations = []
     claim_citations = [item for item in citations if isinstance(item, Mapping)]
     citation_lines = (
-        "\n".join(_citation_brief(index, citation) for index, citation in enumerate(claim_citations, start=1))
+        "\n".join(
+            _citation_brief(index, citation)
+            for index, citation in enumerate(claim_citations, start=1)
+        )
         if claim_citations
         else "1. No claim-aware citation was provided."
     )

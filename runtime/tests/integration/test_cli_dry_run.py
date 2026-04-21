@@ -13,9 +13,7 @@ def test_scan_monitor_and_report_write_run_rows(tmp_path, monkeypatch):
     assert main(["report"]) == 0
 
     conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
-    rows = conn.execute(
-        "select run_type, status from runs order by created_at"
-    ).fetchall()
+    rows = conn.execute("select run_type, status from runs order by created_at").fetchall()
     assert [(row["run_type"], row["status"]) for row in rows] == [
         ("scan", "clean"),
         ("monitor", "clean"),

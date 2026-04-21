@@ -4,7 +4,6 @@ from fastapi import HTTPException, Request, status
 
 from polymarket_alert_bot.config.settings import RuntimeConfig
 
-
 TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
 
 

@@ -4,7 +4,6 @@ from pathlib import Path
 
 from polymarket_alert_bot.config.settings import RuntimePaths
 
-
 ARCHIVEABLE_ALERT_KINDS = {"strict", "reprice", "heartbeat"}
 ALERT_KIND_ALIASES = {
     "strict_degraded": "strict",

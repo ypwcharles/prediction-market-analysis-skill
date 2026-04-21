@@ -1,2 +1,1 @@
 """Judgment engine adapters."""
-

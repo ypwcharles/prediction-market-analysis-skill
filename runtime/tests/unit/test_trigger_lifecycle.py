@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 from polymarket_alert_bot.monitor.trigger_engine import (
     acknowledge_trigger,
     close_trigger,
-    evaluate_trigger,
     evaluate_stored_trigger,
+    evaluate_trigger,
     rearm_trigger,
     snooze_trigger,
 )

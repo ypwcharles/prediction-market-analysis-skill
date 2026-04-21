@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 
 def promote_archive_artifact(archive_path: Path | str, destination_dir: Path | str) -> Path:

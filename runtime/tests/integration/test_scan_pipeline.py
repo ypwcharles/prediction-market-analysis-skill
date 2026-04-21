@@ -8,7 +8,6 @@ from polymarket_alert_bot.scanner.board_scan import run_scan, scan_board
 from polymarket_alert_bot.scanner.clob_client import BookSnapshot, degraded_snapshot
 from polymarket_alert_bot.storage.db import connect_db
 
-
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
@@ -35,7 +34,10 @@ def test_scan_pipeline_prefilters_and_coverage_accounting():
     assert [candidate.market_id for candidate in outcome.degraded] == ["mkt-degraded"]
     assert outcome.tradable[0].condition_id == "cond-election-a"
     assert outcome.degraded[0].condition_id == "cond-fed-may"
-    assert outcome.tradable[0].expression_key == "event-election::will candidate a win the 2026 election?"
+    assert (
+        outcome.tradable[0].expression_key
+        == "event-election::will candidate a win the 2026 election?"
+    )
 
     rejected_reasons = {candidate.market_id: reason for candidate, reason in outcome.rejected}
     assert rejected_reasons == {
@@ -65,7 +67,9 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
             )
         return degraded_snapshot(token_id, "book_missing")
 
-    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
     monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
 
     result = run_scan(
@@ -81,16 +85,27 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
 
     assert result.outcome.coverage.total_events == 1
     assert result.outcome.coverage.total_candidates == 2
-    assert [seed.market_id for seed in result.alert_seeds] == ["mkt-live-tradable", "mkt-live-degraded"]
-    assert [seed.event_slug for seed in result.alert_seeds] == ["live-election-2026", "live-election-2026"]
-    assert [seed.market_slug for seed in result.alert_seeds] == ["candidate-a-wins-live", "candidate-b-wins-live"]
+    assert [seed.market_id for seed in result.alert_seeds] == [
+        "mkt-live-tradable",
+        "mkt-live-degraded",
+    ]
+    assert [seed.event_slug for seed in result.alert_seeds] == [
+        "live-election-2026",
+        "live-election-2026",
+    ]
+    assert [seed.market_slug for seed in result.alert_seeds] == [
+        "candidate-a-wins-live",
+        "candidate-b-wins-live",
+    ]
     assert [seed.market_link for seed in result.alert_seeds] == [
         "https://polymarket.com/event/live-election-2026/candidate-a-wins-live",
         "https://polymarket.com/event/live-election-2026/candidate-b-wins-live",
     ]
     assert result.alert_seeds[0].judgment_seed == {"thesis": "candidate-a-momentum"}
     assert result.alert_seeds[1].judgment_seed is None
-    assert result.alert_seeds[1].evidence_seeds == ({"source": "news", "url": "https://example.com/news"},)
+    assert result.alert_seeds[1].evidence_seeds == (
+        {"source": "news", "url": "https://example.com/news"},
+    )
 
     conn = connect_db(paths.db_path)
     rows = conn.execute(
@@ -100,7 +115,9 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
         ORDER BY market_id
         """
     ).fetchall()
-    assert [(row["alert_kind"], row["market_id"], row["condition_id"], row["status"]) for row in rows] == [
+    assert [
+        (row["alert_kind"], row["market_id"], row["condition_id"], row["status"]) for row in rows
+    ] == [
         ("scanner_seed_degraded", "mkt-live-degraded", "cond-live-b", "seeded"),
         ("scanner_seed", "mkt-live-tradable", "cond-live-a", "seeded"),
     ]

@@ -16,4 +16,3 @@ class SourceRegistry(BaseModel):
     x_handles: set[str] = Field(default_factory=set)
     sources: list[SourceEntry] = Field(default_factory=list)
     tier_metadata: dict[str, list[str]] = Field(default_factory=dict)
-

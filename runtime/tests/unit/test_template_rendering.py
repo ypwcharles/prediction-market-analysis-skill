@@ -13,7 +13,6 @@ from polymarket_alert_bot.templates.monitor_alert import render_monitor_alert
 from polymarket_alert_bot.templates.research_digest import render_research_digest
 from polymarket_alert_bot.templates.strict_memo import render_strict_memo
 
-
 SNAPSHOT_DIR = Path(__file__).resolve().parents[1] / "snapshots"
 
 

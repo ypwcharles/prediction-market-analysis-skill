@@ -34,7 +34,9 @@ class XClient:
         *,
         allowed_handles: set[str] | None = None,
     ) -> list[dict[str, object]]:
-        normalized_allowlist = {self._normalize_handle(handle) for handle in (allowed_handles or set()) if handle}
+        normalized_allowlist = {
+            self._normalize_handle(handle) for handle in (allowed_handles or set()) if handle
+        }
         if not normalized_allowlist:
             return [dict(row) for row in rows]
 
@@ -64,7 +66,9 @@ class XClient:
                     url=str(row["url"]),
                     claim_snippet=str(row["claim_snippet"]),
                     tier=str(row.get("tier") or "supplementary"),
-                    conflict_status=str(row["conflict_status"]) if row.get("conflict_status") else None,
+                    conflict_status=str(row["conflict_status"])
+                    if row.get("conflict_status")
+                    else None,
                 )
             )
         return normalized

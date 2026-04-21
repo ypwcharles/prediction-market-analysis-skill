@@ -1,2 +1,1 @@
 """Polymarket alert bot runtime."""
-

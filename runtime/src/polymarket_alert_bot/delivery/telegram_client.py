@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
 
 import httpx
@@ -12,10 +12,14 @@ def _env_flag(name: str) -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
-def build_inline_keyboard(rows: Iterable[Iterable[tuple[str, str]]]) -> dict[str, list[list[dict[str, str]]]]:
+def build_inline_keyboard(
+    rows: Iterable[Iterable[tuple[str, str]]],
+) -> dict[str, list[list[dict[str, str]]]]:
     keyboard_rows: list[list[dict[str, str]]] = []
     for row in rows:
-        keyboard_rows.append([{"text": text, "callback_data": callback_data} for text, callback_data in row])
+        keyboard_rows.append(
+            [{"text": text, "callback_data": callback_data} for text, callback_data in row]
+        )
     return {"inline_keyboard": keyboard_rows}
 
 
@@ -62,7 +66,11 @@ class TelegramClient:
         self.base_url = base_url.rstrip("/")
         self._request_fn = request_fn
         self._own_client = request_fn is None and http_client is None
-        self._client = None if request_fn is not None else (http_client or httpx.Client(timeout=timeout_seconds))
+        self._client = (
+            None
+            if request_fn is not None
+            else (http_client or httpx.Client(timeout=timeout_seconds))
+        )
 
     def close(self) -> None:
         if self._own_client and self._client is not None:
@@ -151,7 +159,9 @@ class TelegramClient:
         payload: dict[str, Any] = {
             "chat_id": chat_id,
             "message_id": message_id,
-            "reply_markup": inline_keyboard if inline_keyboard is not None else {"inline_keyboard": []},
+            "reply_markup": inline_keyboard
+            if inline_keyboard is not None
+            else {"inline_keyboard": []},
         }
         try:
             return self._request("editMessageReplyMarkup", payload) is not None
@@ -293,14 +303,16 @@ class TelegramClient:
 
     @classmethod
     def _is_callback_query_stale(cls, exc: TelegramAPIError) -> bool:
-        return (
-            cls._contains_phrase(exc, "query is too old")
-            or cls._contains_phrase(exc, "query id is invalid")
+        return cls._contains_phrase(exc, "query is too old") or cls._contains_phrase(
+            exc, "query id is invalid"
         )
 
     @staticmethod
     def _raise_api_error(*, method: str, data: Mapping[str, Any]) -> None:
-        description = str(data.get("description", "unknown telegram error")).strip() or "unknown telegram error"
+        description = (
+            str(data.get("description", "unknown telegram error")).strip()
+            or "unknown telegram error"
+        )
         error_code_value = data.get("error_code")
         error_code: int | None = None
         if isinstance(error_code_value, int):

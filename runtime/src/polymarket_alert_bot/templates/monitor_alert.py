@@ -78,6 +78,4 @@ def render_monitor_alert(payload: Mapping[str, Any]) -> str:
     if trigger_ref or fired_at:
         lines.append(f"trigger ref: id={_as_text(trigger_ref)} | fired_at={_as_text(fired_at)}")
 
-    return "\n".join(
-        lines
-    )
+    return "\n".join(lines)

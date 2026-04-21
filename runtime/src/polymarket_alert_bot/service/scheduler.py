@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import threading
 from typing import Any, Callable
-
 
 Runner = Callable[[], Any]
 
@@ -70,10 +69,7 @@ class RuntimeServiceScheduler:
 
     def snapshot(self) -> dict[str, Any]:
         with self._state_lock:
-            jobs = {
-                name: dict(state)
-                for name, state in self._job_state.items()
-            }
+            jobs = {name: dict(state) for name, state in self._job_state.items()}
             running = self._started and not self._stop_event.is_set()
         return {
             "running": running,

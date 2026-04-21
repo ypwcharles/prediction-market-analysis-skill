@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import os
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -21,7 +21,6 @@ from polymarket_alert_bot.scanner.normalizer import ScanCandidate, normalize_can
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
-
 
 MIN_LIQUIDITY_USD = 1_000.0
 MAX_SPREAD_BPS = 800.0
@@ -201,7 +200,9 @@ def _fetch_live_book(token_id: str, url: str) -> BookSnapshot:
     return degraded_snapshot(token_id, "book_malformed")
 
 
-def _prefilter(events: Sequence[dict[str, Any]], candidates: Sequence[ScanCandidate]) -> ScanOutcome:
+def _prefilter(
+    events: Sequence[dict[str, Any]], candidates: Sequence[ScanCandidate]
+) -> ScanOutcome:
     tradable: list[ScanCandidate] = []
     degraded: list[ScanCandidate] = []
     rejected: list[tuple[ScanCandidate, str]] = []
@@ -244,7 +245,9 @@ def _prefilter(events: Sequence[dict[str, Any]], candidates: Sequence[ScanCandid
         seen_expression_keys.add(candidate.expression_key)
         tradable.append(candidate)
 
-    total_markets = sum(len(event.get("markets", [])) for event in events if isinstance(event.get("markets"), list))
+    total_markets = sum(
+        len(event.get("markets", [])) for event in events if isinstance(event.get("markets"), list)
+    )
     coverage = ScanCoverage(
         total_events=len(events),
         total_markets=total_markets,

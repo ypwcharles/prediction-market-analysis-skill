@@ -51,9 +51,7 @@ def test_reconcile_claimed_position_promotes_claim_to_official(tmp_path):
         snapshot_as_of=now,
     )
 
-    row = conn.execute(
-        "SELECT status, truth_source FROM positions WHERE id = 'pos-1'"
-    ).fetchone()
+    row = conn.execute("SELECT status, truth_source FROM positions WHERE id = 'pos-1'").fetchone()
     assert (row["status"], row["truth_source"]) == ("open", "official_api")
 
 

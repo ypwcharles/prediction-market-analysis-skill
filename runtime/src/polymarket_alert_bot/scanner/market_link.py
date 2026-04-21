@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-
 POLYMARKET_EVENT_BASE_URL = "https://polymarket.com/event"
 
 

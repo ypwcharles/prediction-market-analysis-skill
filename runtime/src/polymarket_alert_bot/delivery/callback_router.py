@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-
 ACTION_ACK = "ack"
 ACTION_SNOOZE = "snooze"
 ACTION_ORDERED = "ordered"
@@ -62,7 +61,11 @@ def make_callback_data(*, action: str, alert_id: str, thesis_cluster_id: str) ->
     resolved_cluster_id = str(thesis_cluster_id).strip()
     if not resolved_alert_id:
         raise ValueError("alert_id is required.")
-    callback_data = f"{CALLBACK_PREFIX}:{action}:{resolved_alert_id}:{resolved_cluster_id}" if resolved_cluster_id else f"{CALLBACK_PREFIX}:{action}:{resolved_alert_id}"
+    callback_data = (
+        f"{CALLBACK_PREFIX}:{action}:{resolved_alert_id}:{resolved_cluster_id}"
+        if resolved_cluster_id
+        else f"{CALLBACK_PREFIX}:{action}:{resolved_alert_id}"
+    )
     if len(callback_data.encode("utf-8")) > 64:
         callback_data = f"{CALLBACK_PREFIX}:{action}:{resolved_alert_id}"
     if len(callback_data.encode("utf-8")) > 64:
@@ -70,7 +73,9 @@ def make_callback_data(*, action: str, alert_id: str, thesis_cluster_id: str) ->
     return callback_data
 
 
-def build_feedback_keyboard(*, alert_id: str, thesis_cluster_id: str) -> dict[str, list[list[dict[str, str]]]]:
+def build_feedback_keyboard(
+    *, alert_id: str, thesis_cluster_id: str
+) -> dict[str, list[list[dict[str, str]]]]:
     def button(action: str) -> dict[str, str]:
         return {
             "text": ACTION_LABELS[action],
@@ -119,7 +124,9 @@ class CallbackRouter:
         telegram_chat_id = self._optional_text(chat.get("id"))
         telegram_message_id = self._optional_text(message.get("message_id"))
         message_thread_id = self._optional_text(message.get("message_thread_id"))
-        message_text = self._optional_text(message.get("text")) or self._optional_text(message.get("caption"))
+        message_text = self._optional_text(message.get("text")) or self._optional_text(
+            message.get("caption")
+        )
         update_id = self._optional_text(update.get("update_id"))
         from_payload = callback_query.get("from")
         if not isinstance(from_payload, Mapping):

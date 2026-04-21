@@ -114,6 +114,10 @@ def _optional_str(value: object) -> str | None:
 def _to_float(value: object) -> float | None:
     if value is None:
         return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
     try:
         return float(value)
     except (TypeError, ValueError):

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import json
 import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -165,11 +165,14 @@ def normalize_official_positions(
             continue
 
         snapshot_as_of = str(
-            _coalesce(item, "snapshot_as_of", "snapshotAsOf", "asOf", "fetched_at")
-            or timestamp
+            _coalesce(item, "snapshot_as_of", "snapshotAsOf", "asOf", "fetched_at") or timestamp
         )
         side_text = str(_coalesce(item, "side", "outcome", "positionSide") or "YES").strip().upper()
-        status = str(_coalesce(item, "status", "position_status", "positionStatus") or "").strip().lower()
+        status = (
+            str(_coalesce(item, "status", "position_status", "positionStatus") or "")
+            .strip()
+            .lower()
+        )
         if not status:
             status = "open" if size_shares > 0 else "closed"
 
@@ -238,7 +241,10 @@ def _normalize_threshold_kind(value: Any) -> str:
 
 
 def _requires_live_orderbook(trigger_row: sqlite3.Row) -> bool:
-    return _normalize_threshold_kind(trigger_row["threshold_kind"]) in _ORDERBOOK_OBSERVATION_THRESHOLD_KINDS
+    return (
+        _normalize_threshold_kind(trigger_row["threshold_kind"])
+        in _ORDERBOOK_OBSERVATION_THRESHOLD_KINDS
+    )
 
 
 def _fetch_live_book(token_id: str, *, url: str) -> BookSnapshot:
@@ -301,14 +307,20 @@ def _build_observations(
             [token_id],
         ).fetchone()
     live_price_cents = _price_cents_from_snapshot(book_snapshot)
-    live_spread_bps = None if book_snapshot is None or book_snapshot.is_degraded else book_snapshot.spread_bps
-    live_slippage_bps = None if book_snapshot is None or book_snapshot.is_degraded else book_snapshot.slippage_bps
+    live_spread_bps = (
+        None if book_snapshot is None or book_snapshot.is_degraded else book_snapshot.spread_bps
+    )
+    live_slippage_bps = (
+        None if book_snapshot is None or book_snapshot.is_degraded else book_snapshot.slippage_bps
+    )
     return {
         "price_cents": live_price_cents,
         "executable_edge_cents": trigger_row["executable_edge_cents"],
         "theoretical_edge_cents": trigger_row["theoretical_edge_cents"],
         "spread_bps": live_spread_bps if live_spread_bps is not None else trigger_row["spread_bps"],
-        "slippage_bps": live_slippage_bps if live_slippage_bps is not None else trigger_row["slippage_bps"],
+        "slippage_bps": live_slippage_bps
+        if live_slippage_bps is not None
+        else trigger_row["slippage_bps"],
         "position_size_shares": position_row["position_size_shares"] if position_row else None,
         "position_status": position_row["position_status"] if position_row else None,
         "narrative": trigger_row["why_now"],
@@ -348,7 +360,14 @@ def _condition_still_met(trigger: dict[str, Any], *, observations: dict[str, obj
         return False
     observation = observations.get(observation_key_for_threshold(trigger.get("threshold_kind")))
     observed_state = str(observation) if observation is not None else None
-    return condition_met(trigger, observed_value=observation, observed_state=observed_state)
+    observed_value: float | str | None
+    if isinstance(observation, (int, float)):
+        observed_value = float(observation)
+    elif isinstance(observation, str):
+        observed_value = observation
+    else:
+        observed_value = None
+    return condition_met(trigger, observed_value=observed_value, observed_state=observed_state)
 
 
 def _rearm_snoozed_triggers(
@@ -513,7 +532,9 @@ def run_monitor(
         stale_alert_ids=stale_alert_ids,
         fired_actions=fired_actions,
         pending_recheck_actions=pending_recheck_actions,
-        requires_llm_recheck_trigger_ids=[str(item["trigger_id"]) for item in pending_recheck_actions],
+        requires_llm_recheck_trigger_ids=[
+            str(item["trigger_id"]) for item in pending_recheck_actions
+        ],
         reconciled_claim_ids=reconciled_claim_ids,
         synced_official_positions=len(official_rows),
     )

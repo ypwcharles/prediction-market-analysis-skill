@@ -154,7 +154,9 @@ def test_run_report_marks_production_ready_with_override(monkeypatch, tmp_path):
         """
     ).fetchone()
     assert report_row["status"] == "ready_for_production"
-    assert "- Status: ready_for_production" in Path(report_row["report_path"]).read_text(encoding="utf-8")
+    assert "- Status: ready_for_production" in Path(report_row["report_path"]).read_text(
+        encoding="utf-8"
+    )
 
 
 def _seed_clusters(conn, *, now: str, cluster_ids: list[str]) -> None:
@@ -196,5 +198,14 @@ def _seed_alert(
             status, dedupe_key, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [alert_id, run_id, cluster_id, alert_kind, "immediate", "active", f"dedupe-{alert_id}", created_at],
+        [
+            alert_id,
+            run_id,
+            cluster_id,
+            alert_kind,
+            "immediate",
+            "active",
+            f"dedupe-{alert_id}",
+            created_at,
+        ],
     )

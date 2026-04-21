@@ -12,4 +12,3 @@ class RunStatus(StrEnum):
     CLEAN = "clean"
     DEGRADED = "degraded"
     FAILED = "failed"
-

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 from polymarket_alert_bot.models.records import SourceEntry, SourceRegistry
 
@@ -33,11 +33,7 @@ def load_source_registry(path: str | Path) -> SourceRegistry:
         for source in sources
         if source.is_primary_allowed and not source.domain_or_handle.startswith("@")
     }
-    x_handles = {
-        source.domain_or_handle
-        for source in sources
-        if source.kind == "x"
-    }
+    x_handles = {source.domain_or_handle for source in sources if source.kind == "x"}
 
     return SourceRegistry(
         version=payload["version"],

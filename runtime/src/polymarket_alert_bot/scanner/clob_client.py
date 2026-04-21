@@ -6,7 +6,6 @@ from typing import Any
 
 import httpx
 
-
 DEFAULT_CLOB_BOOK_URL = "https://clob.polymarket.com/book"
 DEFAULT_TIMEOUT_SECONDS = 8.0
 
@@ -123,6 +122,8 @@ def _extract_prices(levels: Any) -> list[float]:
         if not isinstance(level, Mapping):
             continue
         price = level.get("price")
+        if not isinstance(price, (str, int, float)):
+            continue
         try:
             parsed = float(price)
         except (TypeError, ValueError):

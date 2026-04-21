@@ -10,7 +10,9 @@ class RuntimeRepository:
 
     def upsert_run(self, payload: dict[str, Any]) -> None:
         columns = sorted(payload)
-        assignments = ", ".join(f"{column}=excluded.{column}" for column in columns if column != "id")
+        assignments = ", ".join(
+            f"{column}=excluded.{column}" for column in columns if column != "id"
+        )
         self.conn.execute(
             f"""
             INSERT INTO runs ({", ".join(columns)})
@@ -23,7 +25,9 @@ class RuntimeRepository:
 
     def insert_alert(self, payload: dict[str, Any]) -> None:
         columns = sorted(payload)
-        assignments = ", ".join(f"{column}=excluded.{column}" for column in columns if column != "id")
+        assignments = ", ".join(
+            f"{column}=excluded.{column}" for column in columns if column != "id"
+        )
         self.conn.execute(
             f"""
             INSERT INTO alerts ({", ".join(columns)})
@@ -36,7 +40,9 @@ class RuntimeRepository:
 
     def upsert_thesis_cluster(self, payload: dict[str, Any]) -> None:
         columns = sorted(payload)
-        assignments = ", ".join(f"{column}=excluded.{column}" for column in columns if column != "id")
+        assignments = ", ".join(
+            f"{column}=excluded.{column}" for column in columns if column != "id"
+        )
         self.conn.execute(
             f"""
             INSERT INTO thesis_clusters ({", ".join(columns)})
@@ -49,7 +55,9 @@ class RuntimeRepository:
 
     def upsert_cluster_expression(self, payload: dict[str, Any]) -> None:
         columns = sorted(payload)
-        assignments = ", ".join(f"{column}=excluded.{column}" for column in columns if column != "id")
+        assignments = ", ".join(
+            f"{column}=excluded.{column}" for column in columns if column != "id"
+        )
         self.conn.execute(
             f"""
             INSERT INTO cluster_expressions ({", ".join(columns)})
@@ -62,7 +70,9 @@ class RuntimeRepository:
 
     def upsert_source(self, payload: dict[str, Any]) -> None:
         columns = sorted(payload)
-        assignments = ", ".join(f"{column}=excluded.{column}" for column in columns if column != "id")
+        assignments = ", ".join(
+            f"{column}=excluded.{column}" for column in columns if column != "id"
+        )
         self.conn.execute(
             f"""
             INSERT INTO sources ({", ".join(columns)})
@@ -194,7 +204,9 @@ class RuntimeRepository:
             [alert_id],
         ).fetchone()
 
-    def list_active_alerts(self, *, alert_kinds: tuple[str, ...] | None = None) -> list[sqlite3.Row]:
+    def list_active_alerts(
+        self, *, alert_kinds: tuple[str, ...] | None = None
+    ) -> list[sqlite3.Row]:
         query = """
             SELECT *
             FROM alerts

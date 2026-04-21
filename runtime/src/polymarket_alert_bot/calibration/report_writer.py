@@ -4,15 +4,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from polymarket_alert_bot.config.settings import RuntimePaths
 from polymarket_alert_bot.calibration.metrics import build_calibration_summary
+from polymarket_alert_bot.config.settings import RuntimePaths
 from polymarket_alert_bot.models.enums import RunStatus, RunType
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
 
 
-def _write_markdown_report(report_path: Path, summary: dict[str, int | float | str], created_at: str) -> None:
+def _write_markdown_report(
+    report_path: Path, summary: dict[str, int | float | str], created_at: str
+) -> None:
     coverage_pct = f"{float(summary['cluster_coverage_ratio']) * 100:.1f}%"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(

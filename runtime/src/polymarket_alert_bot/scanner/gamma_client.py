@@ -5,7 +5,6 @@ from typing import Any
 
 import httpx
 
-
 DEFAULT_GAMMA_EVENTS_URL = "https://gamma-api.polymarket.com/events"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 BROWSER_USER_AGENT = (
@@ -48,7 +47,9 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
     for raw_event in raw_events:
         event_id = _string_or_none(raw_event.get("id"))
         event_slug = _string_or_none(raw_event.get("slug"))
-        event_title = _string_or_none(raw_event.get("title")) or _string_or_none(raw_event.get("question"))
+        event_title = _string_or_none(raw_event.get("title")) or _string_or_none(
+            raw_event.get("question")
+        )
         event_rules_text = _compose_rules_text(
             raw_event,
             fields=(

@@ -10,3 +10,4 @@ runtime/.venv/
 runtime/.pytest_cache/
 runtime/.mypy_cache/
 runtime/.ruff_cache/
+runtime/.coverage

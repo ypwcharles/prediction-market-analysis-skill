@@ -11,7 +11,6 @@ from polymarket_alert_bot.scanner.clob_client import BookSnapshot
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 
-
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
@@ -181,17 +180,16 @@ def test_run_monitor_evaluates_triggers_and_reconciles_claims(monkeypatch, tmp_p
     assert outcome.reconciled_claim_ids == ["pos-claim-1"]
 
     trigger_states = {
-        row["id"]: row["state"]
-        for row in conn.execute("SELECT id, state FROM triggers").fetchall()
+        row["id"]: row["state"] for row in conn.execute("SELECT id, state FROM triggers").fetchall()
     }
     assert trigger_states == {
         "trg-size": "fired",
         "trg-narrative": "armed",
     }
 
-    alert_status = conn.execute(
-        "SELECT status FROM alerts WHERE id = 'alert-stale'"
-    ).fetchone()["status"]
+    alert_status = conn.execute("SELECT status FROM alerts WHERE id = 'alert-stale'").fetchone()[
+        "status"
+    ]
     cluster_status = conn.execute(
         "SELECT status FROM thesis_clusters WHERE id = 'cluster-stale'"
     ).fetchone()["status"]

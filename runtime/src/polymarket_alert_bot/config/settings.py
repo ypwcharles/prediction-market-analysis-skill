@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import os
 import shlex
+from dataclasses import dataclass
+from pathlib import Path
 
 
 def _repo_root() -> Path:
@@ -78,11 +78,12 @@ def load_runtime_paths() -> RuntimePaths:
 
 
 def load_runtime_config() -> RuntimeConfig:
-    judgment_command_text = (
-        _optional_env("POLYMARKET_ALERT_BOT_JUDGMENT_COMMAND")
-        or _optional_env("POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD")
+    judgment_command_text = _optional_env("POLYMARKET_ALERT_BOT_JUDGMENT_COMMAND") or _optional_env(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD"
     )
-    judgment_command = tuple(_split_command_text(judgment_command_text)) if judgment_command_text else ()
+    judgment_command = (
+        tuple(_split_command_text(judgment_command_text)) if judgment_command_text else ()
+    )
 
     return RuntimeConfig(
         gamma_events_url=os.environ.get(

@@ -16,7 +16,11 @@ def _parse_numeric(value: str | float | int | None) -> float | None:
         return None
 
 
-def condition_met(trigger: dict[str, Any], observed_value: float | str | None = None, observed_state: str | None = None) -> bool:
+def condition_met(
+    trigger: dict[str, Any],
+    observed_value: float | str | None = None,
+    observed_state: str | None = None,
+) -> bool:
     comparison = trigger["comparison"]
     threshold_value = trigger["threshold_value"]
 
@@ -66,7 +70,9 @@ def acknowledge_trigger(trigger: dict[str, Any], *, now: datetime | None = None)
     return updated
 
 
-def snooze_trigger(trigger: dict[str, Any], *, now: datetime | None = None, minutes: int = 60) -> dict[str, Any]:
+def snooze_trigger(
+    trigger: dict[str, Any], *, now: datetime | None = None, minutes: int = 60
+) -> dict[str, Any]:
     now = now or datetime.now(UTC)
     updated = deepcopy(trigger)
     updated["state"] = "snoozed"

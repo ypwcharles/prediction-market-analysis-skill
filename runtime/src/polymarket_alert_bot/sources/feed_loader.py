@@ -35,7 +35,9 @@ def _load_payload(
 ) -> Any:
     parsed = urlparse(feed_source)
     if parsed.scheme in {"http", "https"}:
-        return _load_remote_payload(feed_source, http_client=http_client, timeout_seconds=timeout_seconds)
+        return _load_remote_payload(
+            feed_source, http_client=http_client, timeout_seconds=timeout_seconds
+        )
     local_path = _resolve_local_path(feed_source, parsed=parsed)
     return json.loads(local_path.read_text(encoding="utf-8"))
 

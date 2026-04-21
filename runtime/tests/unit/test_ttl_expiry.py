@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from polymarket_alert_bot.monitor.staleness import mark_stale_alerts
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
-from polymarket_alert_bot.monitor.staleness import mark_stale_alerts
 
 
 def test_mark_stale_alerts_updates_alert_and_cluster(tmp_path):
@@ -51,9 +51,7 @@ def test_mark_stale_alerts_updates_alert_and_cluster(tmp_path):
 
     stale_ids = mark_stale_alerts(conn, now=now)
     assert stale_ids == ["alert-1"]
-    alert_status = conn.execute(
-        "SELECT status FROM alerts WHERE id = 'alert-1'"
-    ).fetchone()[0]
+    alert_status = conn.execute("SELECT status FROM alerts WHERE id = 'alert-1'").fetchone()[0]
     cluster_status = conn.execute(
         "SELECT status FROM thesis_clusters WHERE id = 'cluster-1'"
     ).fetchone()[0]

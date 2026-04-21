@@ -28,17 +28,16 @@ def _citation_line(index: int, citation: Mapping[str, Any]) -> str:
     if not isinstance(source, Mapping):
         source = {}
     source_name = _as_text(
-        source.get("name", citation.get("source_name", citation.get("source_id", source.get("id")))),
+        source.get(
+            "name", citation.get("source_name", citation.get("source_id", source.get("id")))
+        ),
         default="unknown",
     )
     tier = _as_text(source.get("tier", citation.get("source_tier")), default="unknown")
     url = _as_text(source.get("url", citation.get("url")))
     fetched_at = _as_text(source.get("fetched_at", citation.get("fetched_at")))
     detail = (
-        f"{index}. {claim}\n"
-        f"   -> {source_name} ({tier})\n"
-        f"   -> {url}\n"
-        f"   -> fetched: {fetched_at}"
+        f"{index}. {claim}\n   -> {source_name} ({tier})\n   -> {url}\n   -> fetched: {fetched_at}"
     )
     claim_id = _as_text(citation.get("claim_id"), default="")
     if claim_id:
@@ -49,7 +48,9 @@ def _citation_line(index: int, citation: Mapping[str, Any]) -> str:
 def _render_claim_aware_citations(citations: list[Mapping[str, Any]]) -> str:
     if not citations:
         return "1. No claim-aware citation was provided."
-    return "\n".join(_citation_line(index, citation) for index, citation in enumerate(citations, start=1))
+    return "\n".join(
+        _citation_line(index, citation) for index, citation in enumerate(citations, start=1)
+    )
 
 
 def render_strict_memo(payload: Mapping[str, Any]) -> str:
