@@ -18,6 +18,7 @@ class RuntimePaths:
     sources_path: Path
     scan_lock: Path
     monitor_lock: Path
+    report_lock: Path
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,15 @@ class RuntimeConfig:
     x_feed_url: str | None
     news_samples_path: Path | None
     x_samples_path: Path | None
+    service_host: str
+    service_port: int
+    service_enable_scheduler: bool
+    service_bearer_token: str | None
+    telegram_webhook_secret: str | None
+    service_public_base_url: str | None
+    scan_interval_seconds: int
+    monitor_interval_seconds: int
+    report_interval_seconds: int
 
 
 def load_runtime_paths() -> RuntimePaths:
@@ -63,6 +73,7 @@ def load_runtime_paths() -> RuntimePaths:
         sources_path=sources_path,
         scan_lock=data_dir / "locks" / "scan.lock",
         monitor_lock=data_dir / "locks" / "monitor.lock",
+        report_lock=data_dir / "locks" / "report.lock",
     )
 
 
@@ -97,6 +108,38 @@ def load_runtime_config() -> RuntimeConfig:
         x_feed_url=_optional_env("POLYMARKET_ALERT_BOT_X_FEED_URL"),
         news_samples_path=_optional_path("POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH"),
         x_samples_path=_optional_path("POLYMARKET_ALERT_BOT_X_SAMPLES_PATH"),
+        service_host=os.environ.get(
+            "POLYMARKET_ALERT_BOT_SERVICE_HOST",
+            os.environ.get("POLYMARKET_ALERT_BOT_HOST", "0.0.0.0"),
+        ),
+        service_port=int(
+            os.environ.get(
+                "POLYMARKET_ALERT_BOT_SERVICE_PORT",
+                os.environ.get("POLYMARKET_ALERT_BOT_PORT", "8080"),
+            )
+        ),
+        service_enable_scheduler=_env_flag(
+            "POLYMARKET_ALERT_BOT_SERVICE_ENABLE_SCHEDULER",
+            default=True,
+        ),
+        service_bearer_token=(
+            _optional_env("POLYMARKET_ALERT_BOT_SERVICE_BEARER_TOKEN")
+            or _optional_env("POLYMARKET_ALERT_BOT_INTERNAL_BEARER_TOKEN")
+        ),
+        telegram_webhook_secret=_optional_env("POLYMARKET_ALERT_BOT_TELEGRAM_WEBHOOK_SECRET"),
+        service_public_base_url=(
+            _optional_env("POLYMARKET_ALERT_BOT_SERVICE_PUBLIC_BASE_URL")
+            or _optional_env("POLYMARKET_ALERT_BOT_BASE_URL")
+        ),
+        scan_interval_seconds=int(
+            os.environ.get("POLYMARKET_ALERT_BOT_SCAN_INTERVAL_SECONDS", "7200")
+        ),
+        monitor_interval_seconds=int(
+            os.environ.get("POLYMARKET_ALERT_BOT_MONITOR_INTERVAL_SECONDS", "900")
+        ),
+        report_interval_seconds=int(
+            os.environ.get("POLYMARKET_ALERT_BOT_REPORT_INTERVAL_SECONDS", "86400")
+        ),
     )
 
 
@@ -122,6 +165,13 @@ def _optional_env(name: str) -> str | None:
 def _optional_path(name: str) -> Path | None:
     value = _optional_env(name)
     return Path(value) if value else None
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _split_command_text(text: str) -> list[str]:

@@ -1,40 +1,53 @@
 # Prediction Market Analysis Skill
 
-## What this is
+This repository holds a reusable skill for analyzing prediction markets such as Polymarket and Kalshi, plus the supporting research notes used to test and refine that workflow.
 
-This repository contains a reusable skill for analyzing prediction markets such as Polymarket and Kalshi. The skill is designed to reject weak setups by default, estimate a main probability plus confidence interval, and size only the strongest setups using a conservative Kelly-based framework.
+The skill is intentionally conservative. It rejects weak setups by default, separates directional edge from timing edge, and sizes only from a conservative probability boundary rather than a single-point estimate.
 
-## What it does
+## What The Skill Does
 
-- Supports both single-market analysis and theme-driven market discovery.
-- Forces evidence grading instead of narrative accumulation.
-- Compares fair value with executable prices after fees and slippage.
-- Incorporates portfolio overlap before final sizing.
-- Outputs only `TRADE` or `NO TRADE`, never a vague middle state.
+- Analyzes single contracts, adjacent buckets, and cross-platform equivalents
+- Screens entire themes or event clusters for cleaner expressions
+- Grades evidence quality instead of accumulating narrative
+- Compares fair value with realistic executable prices after spread, fees, and slippage
+- Applies conservative Kelly sizing with portfolio-overlap checks
+- Returns only `TRADE` or `NO TRADE`
 
-## What it does not do
+## What The Skill Does Not Do
 
-- It does not guarantee profitable trades.
-- It does not auto-execute orders.
-- It does not assume market price is literal truth.
-- It does not size from the central estimate when uncertainty is material.
+- It does not guarantee profitable trades
+- It does not auto-execute orders
+- It does not treat market price as ground truth
+- It does not size from the central estimate when uncertainty is material
 
-## Repository structure
+## Repository Map
 
 - `skills/prediction-market-analysis/SKILL.md`
   Main skill entrypoint and workflow.
 - `skills/prediction-market-analysis/references/`
-  Detailed reference documents for evidence grading, probability/Kelly, domain adapters, and research foundations.
+  Reference material for evidence grading, probability/Kelly, domain adapters, and research foundations.
 - `evals/evals.json`
-  Early benchmark prompts for baseline vs with-skill comparisons.
+  Early benchmark prompts for baseline vs skill-guided comparisons.
+- `docs/README.md`
+  Documentation hub for project docs, analysis notes, and internal specs.
+- `docs/market-analysis/`
+  Saved market write-ups and thesis-specific research memos.
 - `docs/superpowers/specs/`
-  Design specification.
+  Skill design specifications.
 - `docs/superpowers/plans/`
-  Implementation plan.
+  Implementation plans.
 
-## Local usage
+## Documentation Guide
 
-To use the skill locally in Codex, symlink the skill directory into your personal skill namespace if desired:
+Start with [docs/README.md](docs/README.md) if you want the documentation map.
+
+- Use [docs/market-analysis/README.md](docs/market-analysis/README.md) for saved market notes and naming conventions.
+- Use `docs/superpowers/specs/` for the design rationale behind the skill.
+- Use `docs/superpowers/plans/` for implementation planning history.
+
+## Local Usage
+
+To use the skill locally in Codex, symlink the skill directory into your personal skill namespace:
 
 ```bash
 ln -s "$(pwd)/skills/prediction-market-analysis" "$HOME/.agents/skills/prediction-market-analysis"
@@ -42,7 +55,7 @@ ln -s "$(pwd)/skills/prediction-market-analysis" "$HOME/.agents/skills/predictio
 
 If the link already exists, inspect it first and replace it intentionally.
 
-## Evaluation workflow
+## Evaluation Workflow
 
 1. Run representative prompts without the skill.
 2. Run the same prompts with the skill loaded.
@@ -51,15 +64,15 @@ If the link already exists, inspect it first and replace it intentionally.
 
 See `evals/evals.json` for the initial prompt set.
 
-## Publishing notes
+## Publishing Notes
 
-This repository is intended to be publishable as a standalone GitHub repo. After the first commit:
+This repository is structured to be publishable as a standalone GitHub repo. After the first commit:
 
 ```bash
 git init
 git branch -M main
 git add .
-git commit -m "feat: add prediction market analysis skill"
+git commit -m "feat: add prediction-market-analysis skill"
 ```
 
 Then publish either through the GitHub plugin workflow or:

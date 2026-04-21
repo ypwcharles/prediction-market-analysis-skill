@@ -2,11 +2,34 @@
 
 ## Commands
 
+- `uv run polymarket-alert-bot serve`
 - `uv run polymarket-alert-bot scan`
 - `uv run polymarket-alert-bot monitor`
 - `uv run polymarket-alert-bot report`
 - `uv run polymarket-alert-bot callback --payload-file callback.json`
 - `uv run polymarket-alert-bot promote .runtime-data/archives/strict/example.md`
+
+## Docker Service (Single Instance)
+
+1. From `runtime/`, copy the env template:
+   - `cp .env.example .env`
+2. Fill `.env` secrets, especially:
+   - `POLYMARKET_ALERT_BOT_INTERNAL_BEARER_TOKEN`
+   - `POLYMARKET_ALERT_BOT_TELEGRAM_WEBHOOK_SECRET`
+   - `TELEGRAM_BOT_TOKEN`
+3. Start the service:
+   - `docker compose -f docker-compose.example.yml up --build -d`
+4. Stop the service:
+   - `docker compose -f docker-compose.example.yml down`
+
+The compose file mounts a persistent named volume to `/app/.runtime-data`, so SQLite, archives, reports, and locks survive container restarts.
+
+## Webhook and Base URL Notes
+
+- `POLYMARKET_ALERT_BOT_BASE_URL` should be the public HTTPS base URL for callbacks and webhook registration.
+- `POLYMARKET_ALERT_BOT_TELEGRAM_WEBHOOK_SECRET` is a shared secret for Telegram webhook verification; keep it private.
+- `POLYMARKET_ALERT_BOT_INTERNAL_BEARER_TOKEN` is intended for internal service-to-service authorization and should be a long random token.
+- Keep `POLYMARKET_ALERT_BOT_HOST=0.0.0.0` and expose `POLYMARKET_ALERT_BOT_PORT` in Docker so webhook callbacks can reach the container.
 
 ## Environment Variables
 
@@ -18,6 +41,11 @@
 - `POLYMARKET_ALERT_BOT_CLOB_BOOK_URL`
 - `POLYMARKET_ALERT_BOT_POSITIONS_URL`
 - `POLYMARKET_ALERT_BOT_POSITIONS_USER`
+- `POLYMARKET_ALERT_BOT_HOST`
+- `POLYMARKET_ALERT_BOT_PORT`
+- `POLYMARKET_ALERT_BOT_BASE_URL`
+- `POLYMARKET_ALERT_BOT_INTERNAL_BEARER_TOKEN`
+- `POLYMARKET_ALERT_BOT_TELEGRAM_WEBHOOK_SECRET`
 - `POLYMARKET_ALERT_BOT_JUDGMENT_COMMAND`
 - `POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD`
 - `POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS`

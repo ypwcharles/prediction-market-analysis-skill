@@ -1,0 +1,17 @@
+services:
+  polymarket-alert-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: polymarket-alert-bot:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["uv", "run", "polymarket-alert-bot", "serve"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - runtime_data:/app/.runtime-data
+
+volumes:
+  runtime_data:
