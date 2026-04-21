@@ -1,0 +1,30 @@
+version = "v1"
+
+[tiers]
+primary = ["official", "platform", "news"]
+supplementary = ["x"]
+
+[[sources]]
+name = "Polymarket"
+kind = "platform"
+domain_or_handle = "polymarket.com"
+is_primary_allowed = true
+
+[[sources]]
+name = "Reuters"
+kind = "news"
+domain_or_handle = "reuters.com"
+is_primary_allowed = true
+
+[[sources]]
+name = "Associated Press"
+kind = "news"
+domain_or_handle = "apnews.com"
+is_primary_allowed = true
+
+[[sources]]
+name = "Polymarket X"
+kind = "x"
+domain_or_handle = "@polymarket"
+is_primary_allowed = false
+

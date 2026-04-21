@@ -1,0 +1,54 @@
+[
+  {
+    "id": "event-election",
+    "slug": "election-2026",
+    "markets": [
+      {
+        "id": "mkt-tradable",
+        "slug": "candidate-a-wins",
+        "question": "Will Candidate A win the 2026 election?",
+        "status": "open",
+        "active": true,
+        "conditionId": "cond-election-a",
+        "liquidity": 5600,
+        "token_id": "token-tradable"
+      },
+      {
+        "id": "mkt-low-liq",
+        "slug": "candidate-b-wins",
+        "question": "Will Candidate B win the 2026 election?",
+        "status": "open",
+        "active": true,
+        "condition_id": "cond-election-b",
+        "liquidity": 120,
+        "token_id": "token-low-liq"
+      },
+      {
+        "id": "mkt-duplicate",
+        "slug": "candidate-a-wins-alt",
+        "question": "Will Candidate A win the 2026 election?",
+        "status": "open",
+        "active": true,
+        "conditionId": "cond-election-a-alt",
+        "liquidity": 4800,
+        "token_id": "token-duplicate"
+      }
+    ]
+  },
+  {
+    "id": "event-fed",
+    "slug": "fed-meeting-may",
+    "markets": [
+      {
+        "id": "mkt-degraded",
+        "slug": "rate-cut-by-may",
+        "question": "Will the Fed cut rates by May?",
+        "status": "open",
+        "active": true,
+        "condition_id": "cond-fed-may",
+        "liquidity": 3200,
+        "token_id": "token-degraded"
+      }
+    ]
+  }
+]

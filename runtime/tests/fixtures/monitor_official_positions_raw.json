@@ -1,0 +1,11 @@
+[
+  {
+    "conditionId": "cond-1",
+    "asset": "token-1",
+    "marketId": "market-1",
+    "outcome": "yes",
+    "size": 12,
+    "avgPrice": 0.415,
+    "asOf": "2026-04-17T00:00:00+00:00"
+  }
+]

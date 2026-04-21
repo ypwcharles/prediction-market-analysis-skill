@@ -1,0 +1,49 @@
+{
+  "books": [
+    {
+      "token_id": "token-tradable",
+      "bids": [
+        {
+          "price": "0.49",
+          "size": "1200"
+        }
+      ],
+      "asks": [
+        {
+          "price": "0.51",
+          "size": "1300"
+        }
+      ]
+    },
+    {
+      "token_id": "token-low-liq",
+      "bids": [
+        {
+          "price": "0.33",
+          "size": "210"
+        }
+      ],
+      "asks": [
+        {
+          "price": "0.35",
+          "size": "240"
+        }
+      ]
+    },
+    {
+      "token_id": "token-duplicate",
+      "bids": [
+        {
+          "price": "0.48",
+          "size": "910"
+        }
+      ],
+      "asks": [
+        {
+          "price": "0.50",
+          "size": "960"
+        }
+      ]
+    }
+  ]
+}

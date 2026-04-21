@@ -1,0 +1,15 @@
+[
+  {
+    "id": "pos-1",
+    "condition_id": "cond-1",
+    "token_id": "token-1",
+    "market_id": "market-1",
+    "side": "YES",
+    "size_shares": 10.0,
+    "avg_entry_cents": 42.0,
+    "status": "open",
+    "truth_source": "official_api",
+    "snapshot_as_of": "2026-04-17T00:00:00+00:00",
+    "updated_at": "2026-04-17T00:00:00+00:00"
+  }
+]

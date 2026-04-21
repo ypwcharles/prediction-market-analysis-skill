@@ -1,0 +1,14 @@
+[
+  {
+    "source_id": "reuters_001",
+    "url": "https://www.reuters.com/world/example-news-1",
+    "claim_snippet": "Officials confirmed negotiations resumed.",
+    "tier": "primary"
+  },
+  {
+    "source_id": "ap_002",
+    "url": "https://apnews.com/article/example-news-2",
+    "claim_snippet": "Associated Press reports a formal statement was filed.",
+    "tier": "primary"
+  }
+]

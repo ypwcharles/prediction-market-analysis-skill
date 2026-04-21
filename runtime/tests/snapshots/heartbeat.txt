@@ -1,0 +1,5 @@
+[DEGRADED]
+scan run: run-scan-001
+monitor run: run-monitor-001
+strict/research/skipped: 2/4/19
+reason: news source timeout, monitor still healthy

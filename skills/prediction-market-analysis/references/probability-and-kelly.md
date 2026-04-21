@@ -49,6 +49,11 @@ Before pricing a contract, separate:
 - `P(event happens within this contract window)`
 - `P(market resolves the way the real-world event suggests)`
 
+For institutional-decision markets, also separate:
+
+- `P(actor waits despite eventual action)`
+- `P(action is deferred to a nearby later window)`
+
 These are not interchangeable.
 
 For narrow time buckets:
@@ -57,13 +62,24 @@ For narrow time buckets:
 - weak timing precision often supports `No` on the early bucket better than `Yes` on the exact bucket
 - "soon", "likely", and "momentum is building" are timing-weak statements unless tied to a calendar, procedural gate, or operational constraint
 
+## Deferred-Action / Earlier Non-Occurrence Audit
+
+When analyzing an earlier non-occurrence leg, explicitly ask:
+
+1. Can the actor rationally wait without disproving the broader thesis?
+2. Do primary sources show data dependence, optionality, or consensus-building behavior?
+3. Does the earlier non-occurrence leg win across multiple "right but later" paths?
+4. Is the market charging a large premium for immediacy rather than for the broad event?
+
+If the answer is yes across this set, treat the trade as a high-quality timing fade, not as a generic narrow-window punt.
+
 ## Bucket Selection Audit
 
 When related time buckets or threshold ladders exist, explicitly ask:
 
 1. Is the asked market the cleanest expression of the thesis?
 2. Would a later bucket retain the same directional edge with less clock risk?
-3. Would `No` on the earlier bucket dominate `Yes` on the exact bucket?
+3. Would the earlier non-occurrence leg dominate the exact-action leg?
 4. If the thesis is right but late, which contract gets paid?
 5. Is the market charging too much for time precision the evidence does not justify?
 
@@ -115,6 +131,12 @@ For time-bucket trades, widen further when:
 - a key step depends on bureaucracy, logistics, weather, litigation, or market hours
 - the thesis is directionally strong but exact timing remains soft
 
+Do not reflexively apply the same extra widening to an earlier non-occurrence leg if:
+
+- the position wins on several plausible late paths
+- primary sources explicitly support waiting
+- the main uncertainty is whether action is deferred rather than whether it happens
+
 ## Consistency Checks
 
 Before accepting the final probability, compare it against:
@@ -142,6 +164,25 @@ Compare:
 
 If the net edge is marginal, reject.
 
+## Asymmetric Time-Precision Haircuts
+
+Time-precision risk is not symmetric.
+
+- Exact-bucket `Yes` usually deserves a heavier haircut because it needs both direction and clock precision.
+- An earlier non-occurrence leg can deserve a smaller haircut when delay helps the position and multiple later paths still win.
+
+Reduce the normal time-precision haircut only when all of the following hold:
+
+- settlement is clean
+- primary sources support waiting or deferability
+- the trade wins if the thesis is right but late
+- liquidity is good enough to enter and exit without fantasy fills
+
+For clarity:
+
+- in binary markets this is often `No`
+- in multi-outcome markets this can be `Yes` on a named no-action bucket such as `No change`
+
 ## Kelly Framework
 
 Kelly exists to size edge, not to prove edge exists.
@@ -153,6 +194,8 @@ Workflow:
 3. Use the conservative boundary only.
 4. Apply Kelly to net executable odds.
 5. Haircut the result for model risk and portfolio context.
+
+Do not upgrade size from realized profit alone. Upgrade only when the decisive edge was available ex ante and survives outcome-blind review.
 
 For resolution arbs, Kelly is usually secondary to operational risk. Start with resolution confidence, then haircut harder for:
 
@@ -174,6 +217,21 @@ Apply at least:
 - concentration haircut for same-thesis ladders
 
 The final recommendation should usually be much smaller than raw Kelly.
+
+Do not double-count timing risk when the trade benefits from timing uncertainty rather than being harmed by it.
+
+## Edge Promotion Checklist
+
+Before promoting a setup from `0.1 Kelly` territory toward `0.25 Kelly`, require explicit confirmation that:
+
+- settlement was clean ex ante
+- the best expression clearly dominated nearby alternatives
+- decisive evidence was primary-source driven at entry, not discovered later
+- the trade won across multiple plausible paths rather than one narrow lucky path
+- contradictory primary evidence was limited or already incorporated in the interval
+- executable liquidity was sufficient for the intended size
+
+If any of these are missing, keep the setup in the smaller sizing bucket even if the trade ultimately worked.
 
 ## Position Size Format
 
@@ -205,6 +263,10 @@ If multiple buckets express the same thesis:
 - size earlier or narrower buckets as satellites, not as the main risk
 - absent strong timing evidence, near buckets should usually be materially smaller than later buckets
 
+Exception:
+
+- an earlier non-occurrence leg can be the core leg when it wins across many "right but later" paths and the market is overcharging for immediate action
+
 A good default for event-driven discretionary trading is:
 
 - far bucket = core size
@@ -234,3 +296,25 @@ Normalize conservative buckets:
 - rarely `0.5 Kelly`
 
 Do not normalize full Kelly or large concentration bets.
+
+High-quality timing fades can qualify for the `0.25 Kelly` bucket after all haircuts when:
+
+- deferability evidence is primary-source driven
+- the earlier non-occurrence leg is the cleanest expression
+- executable edge still exists on the conservative boundary
+- liquidity and portfolio overlap are acceptable
+- the edge promotion checklist passes on an outcome-blind basis
+
+Ordinary narrow-window views should usually stay at `0 Kelly` or `0.1 Kelly`.
+
+## Outcome-Blind Post-Trade Review
+
+After a win or loss, review the trade in this order:
+
+1. What was known at entry?
+2. Which evidence was decisive at entry?
+3. Which evidence arrived later and should not be credited to the original process?
+4. Did the chosen contract still dominate nearby expressions?
+5. Was the original size too small, appropriate, or too large for the ex ante edge quality?
+
+Do not let a large mark-to-market gain overwrite a weak original case.

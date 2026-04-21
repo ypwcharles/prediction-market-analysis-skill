@@ -48,6 +48,89 @@
         "The output names the rule-scope differences between the two contracts.",
         "The output does not treat the pair as a pure time-bucket ladder."
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Polymarket 上 'Bank of Japan Decision in April?' 里，`No change` 在 0.35，`25 bps increase` 在 0.63。我的 thesis 是：日本通胀和工资确实偏鹰，但 BOJ 完全可以等到 6 月或 7 月再加；3 月会议摘要也强调下次会议再细看数据。请按模板分析，并说明这是不是一个高质量 timing fade，以及 sizing 是否应该只是试仓。",
+      "expected_output": "The analysis identifies the setup as a time-bucket trade with a high-quality timing-fade profile, prefers `Yes` on `No change` as the earlier non-occurrence leg because the thesis can be right but later, and does not automatically shrink sizing to a token probe when the conservative edge remains after haircuts.",
+      "files": [],
+      "expectations": [
+        "The output explicitly says the thesis may still be directionally right even if April misses.",
+        "The output uses primary-source deferability or wait-and-see evidence as timing evidence.",
+        "The output names `Yes` on `No change` as the best expression.",
+        "The sizing section distinguishes this setup from an ordinary narrow-window punt."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "我在 'Bank of Japan Decision in April?' 这个市场里以 0.35 买了 `Yes` on `No change`，现在浮盈很大。我想复盘这笔交易并优化 skill：请区分哪些 edge 是当时就知道的，哪些只是事后信息；再判断这类 setup 未来是否可以从试仓提升到更高 sizing。",
+      "expected_output": "The analysis reviews the trade outcome-blind, separates ex ante evidence from later-confirming information, identifies whether the original sizing was too small for the knowable edge, and avoids treating profit alone as proof that future sizing should always be larger.",
+      "files": [],
+      "expectations": [
+        "The output explicitly separates what was knowable at entry from what arrived later.",
+        "The output states whether the contract expression still dominated nearby alternatives ex ante.",
+        "The output discusses whether the original sizing was too small, appropriate, or too large.",
+        "The output does not use realized PnL alone as the reason to promote future sizing."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "扫描 Polymarket 的 economy 板块，找 3 个最值得看的机会。但不要只找一种模式。请按 skill 的思路先说明每个候选属于哪条 discovery path，比如 resolution distortion、expression mismatch、deferred-action timing fade、calendar incoherence、rule-scope misunderstanding、threshold misbucket 或 market overreaction，再决定哪些值得深挖。",
+      "expected_output": "The analysis does not collapse discovery into a single favored pattern. It explicitly classifies shortlisted candidates across multiple discovery paths, rejects weak ones quickly, and only deepens on the strongest survivors.",
+      "files": [],
+      "expectations": [
+        "The output explicitly names more than one discovery path.",
+        "The output does not present all candidates as the same path family.",
+        "The output rejects at least one candidate during screening rather than deep-analyzing everything.",
+        "The output connects discovery path classification to contract selection."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Use only the runtime payload in `evals/runtime-v1-scan-payload.json`. Because the payload declares `contract_version: \"runtime.v1\"`, switch into Runtime Judgment Mode and return one JSON object only.",
+      "expected_output": "A JSON object that satisfies the runtime.v1 contract, preserves the skill's conservative analysis logic, and does not emit the interactive eight-section report.",
+      "files": [
+        "evals/runtime-v1-scan-payload.json"
+      ],
+      "expectations": [
+        "The output is a single JSON object, not markdown.",
+        "The output contains the required runtime.v1 top-level fields from the canonical contract.",
+        "The output does not include the literal interactive header '1. Verdict'.",
+        "The output uses a valid runtime alert kind from the canonical contract instead of the literal verdict TRADE or NO TRADE.",
+        "The output includes at least one runtime-meaningful explanatory field (for example: why_now, summary, watch_item, or kill_criteria_text)."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Use only the runtime payload in `evals/runtime-v1-monitor-payload.json`. Stay in Runtime Judgment Mode and return one JSON object only. If the evidence is not clean enough for immediate action, use the appropriate non-strict runtime alert kind rather than falling back to prose.",
+      "expected_output": "A JSON object that preserves runtime mode, uses the existing cluster and position context, and can choose monitor/research/degraded behavior without emitting the interactive report.",
+      "files": [
+        "evals/runtime-v1-monitor-payload.json"
+      ],
+      "expectations": [
+        "The output is a single JSON object, not markdown.",
+        "The output contains the required runtime.v1 top-level fields.",
+        "The output can keep an existing thesis alive with monitor/research/hold semantics instead of forcing a fresh TRADE verdict.",
+        "The output does not include numbered interactive sections.",
+        "When strict_allowed is false and strict_block_reason is no_primary_support, alert_kind must be non-strict (not 'strict' or 'strict_degraded').",
+        "If monitor is used while prior_cluster_state.thesis_cluster_id exists, cluster_action should map to hold rather than none/create."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Use only the runtime payload in `evals/runtime-v1-activation-incomplete-payload.json`. The payload is a structured runtime envelope with `contract_version: \"runtime.v1\"` but incomplete activation inputs. Stay in Runtime Judgment Mode and return degraded runtime JSON fallback.",
+      "expected_output": "A single runtime JSON object in degraded fallback mode (not interactive markdown), with required top-level fields preserved and archive reason set to activation_incomplete.",
+      "files": [
+        "evals/runtime-v1-activation-incomplete-payload.json"
+      ],
+      "expectations": [
+        "The output is a single JSON object, not markdown.",
+        "The output contains the required runtime.v1 top-level fields from the canonical contract.",
+        "The output sets alert_kind to degraded for activation-incomplete fallback.",
+        "The output sets archive_payload.reason to activation_incomplete.",
+        "The output sets cluster_action to none for activation-incomplete fallback.",
+        "The output does not include the interactive header '1. Verdict'."
+      ]
     }
   ]
 }

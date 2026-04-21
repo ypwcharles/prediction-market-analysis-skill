@@ -1,0 +1,17 @@
+[STRICT-DEGRADED]
+thesis: US-Iran headline premium is overstated for this bucket.
+cluster: cluster-iran-001
+expression: US military action against Iran by Apr 30
+action: NO <= 42.0c | size 250 USDC | edge 13.4c
+why now: Orderbook skew widened after single-source reposts, while tiered evidence has not confirmed escalation.
+kill criteria: Exit if primary sources confirm direct US strike authorization or if YES re-prices below edge floor.
+timers: fresh_until=2026-04-17T14:30:00Z | recheck=2026-04-17T12:00:00Z
+citations (claim-aware):
+1. Defense officials said no strike order has been issued.
+   -> Reuters (primary)
+   -> https://example.com/reuters-iran-1
+   -> fetched: 2026-04-17T09:45:00Z
+2. Local outlet reported troop movement rumors without official confirmation.
+   -> RegionalDesk (secondary)
+   -> https://example.com/regionaldesk-42
+   -> fetched: 2026-04-17T09:10:00Z

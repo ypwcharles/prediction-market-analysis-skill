@@ -21,6 +21,7 @@ Use the same core framework across domains, but adjust evidence priorities, comm
 - headline interpretation without reading the primary release
 - double-counting polling and commentary about polling
 - overreacting to low-signal punditry
+- mistaking institutional hawkishness or dovishness for immediate action at the very next meeting
 
 ### When to trust market price more
 
@@ -35,6 +36,14 @@ Use the same core framework across domains, but adjust evidence priorities, comm
 - contested counting / delayed reporting
 - policy wording can be interpreted multiple ways
 - event still depends on multiple future decisions
+
+### Institutional Timing Bias
+
+For central-bank, regulatory, court, and committee markets:
+
+- official language about patience, optionality, or data dependence can be genuine timing evidence
+- markets often overprice urgency after a hot data print or geopolitical shock
+- an earlier non-occurrence leg can be the cleanest expression when the institution can act later without losing the broader policy path
 
 ## Crypto
 
