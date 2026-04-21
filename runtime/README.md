@@ -1,5 +1,7 @@
 # Polymarket Alert Bot Runtime
 
+This directory is the real Python project for the operational runtime. If you are starting from repo root, use `bash scripts/runtime-health.sh` instead of relying on root autodetection.
+
 ## Commands
 
 - `uv run polymarket-alert-bot serve`
@@ -8,6 +10,19 @@
 - `uv run polymarket-alert-bot report`
 - `uv run polymarket-alert-bot callback --payload-file callback.json`
 - `uv run polymarket-alert-bot promote .runtime-data/archives/strict/example.md`
+
+## Health Checks
+
+From repo root:
+
+- `bash scripts/runtime-health.sh`
+
+From `runtime/` directly:
+
+- `uv run ruff check .`
+- `uv run ruff format --check .`
+- `uv run mypy src`
+- `uv run pytest`
 
 ## Docker Service (Single Instance)
 
@@ -107,4 +122,4 @@ The compose file mounts a persistent named volume to `/app/.runtime-data`, so SQ
 1. Add a failing test.
 2. Run the smallest relevant `pytest` target.
 3. Implement the minimum code to pass.
-4. Re-run the targeted tests, then the broader suite.
+4. Re-run the targeted tests, then the root health command.

@@ -1,49 +1,58 @@
-# Prediction Market Analysis Skill
+# Prediction Market Analysis + Runtime
 
-This repository holds a reusable skill for analyzing prediction markets such as Polymarket and Kalshi, plus the supporting research notes used to test and refine that workflow.
+This repo now has four real surfaces:
 
-The skill is intentionally conservative. It rejects weak setups by default, separates directional edge from timing edge, and sizes only from a conservative probability boundary rather than a single-point estimate.
+- a reusable prediction-market analysis skill in `skills/prediction-market-analysis/`
+- an operational alert runtime in `runtime/`
+- runtime and prompt eval fixtures in `evals/`
+- design, ops, and archived analysis docs in `docs/`
 
-## What The Skill Does
-
-- Analyzes single contracts, adjacent buckets, and cross-platform equivalents
-- Screens entire themes or event clusters for cleaner expressions
-- Grades evidence quality instead of accumulating narrative
-- Compares fair value with realistic executable prices after spread, fees, and slippage
-- Applies conservative Kelly sizing with portfolio-overlap checks
-- Returns only `TRADE` or `NO TRADE`
-
-## What The Skill Does Not Do
-
-- It does not guarantee profitable trades
-- It does not auto-execute orders
-- It does not treat market price as ground truth
-- It does not size from the central estimate when uncertainty is material
+The judgment policy is intentionally conservative across both modes. The interactive skill rejects weak setups by default, while the runtime wraps the same judgment logic in a JSON contract for scan, monitor, report, and callback flows.
 
 ## Repository Map
 
 - `skills/prediction-market-analysis/SKILL.md`
-  Main skill entrypoint and workflow.
+  Main skill entrypoint for interactive analysis and runtime judgment mode.
 - `skills/prediction-market-analysis/references/`
-  Reference material for evidence grading, probability/Kelly, domain adapters, and research foundations.
-- `evals/evals.json`
-  Early benchmark prompts for baseline vs skill-guided comparisons.
+  Human-readable reference docs for evidence grading, Kelly sizing, domain adapters, and the runtime judgment contract.
+- `runtime/`
+  The actual Python project: scanner, monitor loop, callback handling, FastAPI service, storage, templates, and Docker packaging.
+- `evals/`
+  Prompt-eval fixtures, including runtime envelope examples for `runtime.v1`.
 - `docs/README.md`
-  Documentation hub for project docs, analysis notes, and internal specs.
+  Documentation hub for design docs, market-analysis archives, and workflow references.
 - `docs/market-analysis/`
-  Saved market write-ups and thesis-specific research memos.
+  Promoted or manually saved market memos.
 - `docs/design-and-plans/`
-  Project-authored design docs and implementation plans.
-- `docs/workflow-references/`
-  External gstack and Superpowers workflow docs that were directly relevant to this repo.
+  Project-authored implementation plans and design rationale.
 
-## Documentation Guide
+## Modes
 
-Start with [docs/README.md](docs/README.md) if you want the documentation map.
+### Interactive Skill
 
-- Use [docs/market-analysis/README.md](docs/market-analysis/README.md) for saved market notes and naming conventions.
-- Use `docs/design-and-plans/` for the project's design rationale and implementation planning history.
-- Use `docs/workflow-references/` for the small set of external gstack and Superpowers workflow documents that were relevant to this project.
+- Analyzes single contracts, adjacent buckets, and cross-platform equivalents.
+- Screens themes or event clusters for cleaner expressions.
+- Explains verdict, evidence quality, mispricing, portfolio overlap, and sizing.
+- Uses the numbered interactive report format from the skill.
+
+### Runtime
+
+- Runs scheduled `scan`, `monitor`, `report`, and `callback` flows from `runtime/`.
+- Uses the canonical `runtime.v1` judgment contract defined in `runtime/src/polymarket_alert_bot/judgment/contract.py`.
+- Persists alerts, clusters, triggers, archives, and reports in `.runtime-data/`.
+- Can deliver Telegram messages, monitor rechecks, and degraded-mode heartbeats.
+
+The repo is no longer accurately described as "just a skill that returns `TRADE` / `NO TRADE`". That still applies to parts of the interactive verdict surface, but not to the runtime contract or the stored alert lifecycle.
+
+## Health
+
+Run the canonical repo-root health command before concluding runtime changes:
+
+```bash
+bash scripts/runtime-health.sh
+```
+
+That command checks the real Python project in `runtime/` with lint, format, type, and test steps.
 
 ## Local Usage
 
@@ -53,30 +62,17 @@ To use the skill locally in Codex, symlink the skill directory into your persona
 ln -s "$(pwd)/skills/prediction-market-analysis" "$HOME/.agents/skills/prediction-market-analysis"
 ```
 
-If the link already exists, inspect it first and replace it intentionally.
-
-## Evaluation Workflow
-
-1. Run representative prompts without the skill.
-2. Run the same prompts with the skill loaded.
-3. Grade whether the output includes the required sections and refusal discipline.
-4. Compare pass rates, token cost, and qualitative output quality.
-
-See `evals/evals.json` for the initial prompt set.
-
-## Publishing Notes
-
-This repository is structured to be publishable as a standalone GitHub repo. After the first commit:
+To run the runtime locally:
 
 ```bash
-git init
-git branch -M main
-git add .
-git commit -m "feat: add prediction-market-analysis skill"
+cd runtime
+uv run polymarket-alert-bot scan
+uv run polymarket-alert-bot monitor
+uv run polymarket-alert-bot report
 ```
 
-Then publish either through the GitHub plugin workflow or:
+## Documentation Guide
 
-```bash
-gh repo create prediction-market-analysis-skill --public --source=. --remote=origin --push
-```
+Start with [docs/README.md](docs/README.md) for the doc map.
+Use [runtime/README.md](runtime/README.md) for runtime commands, service notes, and data-path details.
+Use `CLAUDE.md` for repo-specific routing and health expectations.
