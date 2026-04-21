@@ -8,14 +8,26 @@ from typing import Any, Callable
 from fastapi import FastAPI, HTTPException, Request, status
 
 from polymarket_alert_bot.calibration.report_writer import run_report
-from polymarket_alert_bot.config.settings import RuntimeConfig, RuntimePaths, ensure_runtime_dirs, load_runtime_config, load_runtime_paths
-from polymarket_alert_bot.runtime_flow import execute_callback_flow, execute_monitor_flow, execute_scan_flow
-from polymarket_alert_bot.service.auth import require_internal_bearer, require_telegram_webhook_secret
+from polymarket_alert_bot.config.settings import (
+    RuntimeConfig,
+    RuntimePaths,
+    ensure_runtime_dirs,
+    load_runtime_config,
+    load_runtime_paths,
+)
+from polymarket_alert_bot.flows import (
+    execute_callback_flow,
+    execute_monitor_flow,
+    execute_scan_flow,
+)
+from polymarket_alert_bot.service.auth import (
+    require_internal_bearer,
+    require_telegram_webhook_secret,
+)
 from polymarket_alert_bot.service.scheduler import RuntimeServiceScheduler, ScheduledJob
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.locks import file_lock
 from polymarket_alert_bot.storage.migrations import apply_migrations
-
 
 Runner = Callable[[], Any]
 CallbackRunner = Callable[[dict[str, object]], Any]
@@ -40,7 +52,9 @@ def create_app(
     resolved_monitor_runner = monitor_runner or _build_monitor_runner(resolved_paths, config)
     resolved_report_runner = report_runner or _build_report_runner(resolved_paths)
     resolved_callback_runner = callback_runner or _build_callback_runner(resolved_paths, config)
-    resolved_start_scheduler = config.service_enable_scheduler if start_scheduler is None else start_scheduler
+    resolved_start_scheduler = (
+        config.service_enable_scheduler if start_scheduler is None else start_scheduler
+    )
     owns_scheduler = scheduler is None
     resolved_scheduler = scheduler or RuntimeServiceScheduler(
         [
@@ -170,7 +184,7 @@ def _run_internal(runner: Runner) -> Any:
 
 
 def _serialize_result(result: Any) -> dict[str, object]:
-    if is_dataclass(result):
+    if is_dataclass(result) and not isinstance(result, type):
         return _normalize_json(asdict(result))
     if isinstance(result, dict):
         return _normalize_json(result)

@@ -1,12 +1,20 @@
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from polymarket_alert_bot.archive.promote import promote_archive_artifact
 from polymarket_alert_bot.calibration.report_writer import run_report
-from polymarket_alert_bot.config.settings import ensure_runtime_dirs, load_runtime_config, load_runtime_paths
-from polymarket_alert_bot.runtime_flow import execute_callback_flow, execute_monitor_flow, execute_scan_flow
+from polymarket_alert_bot.config.settings import (
+    ensure_runtime_dirs,
+    load_runtime_config,
+    load_runtime_paths,
+)
+from polymarket_alert_bot.flows import (
+    execute_callback_flow,
+    execute_monitor_flow,
+    execute_scan_flow,
+)
 
 
 def main(argv: list[str] | None = None) -> int:

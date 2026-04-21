@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from polymarket_alert_bot.cli import main
 from polymarket_alert_bot.config.settings import ensure_runtime_dirs, load_runtime_paths
@@ -11,7 +11,6 @@ from polymarket_alert_bot.runtime_flow import execute_monitor_flow
 from polymarket_alert_bot.scanner.clob_client import BookSnapshot, degraded_snapshot
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
-
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -86,7 +85,9 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
             )
         return degraded_snapshot(token_id, "book_missing")
 
-    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
     monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
 
     assert main(["scan"]) == 0
@@ -99,16 +100,30 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
         ORDER BY market_id
         """
     ).fetchall()
-    assert [(row["alert_kind"], row["market_id"], row["condition_id"], row["status"]) for row in alerts] == [
+    assert [
+        (row["alert_kind"], row["market_id"], row["condition_id"], row["status"]) for row in alerts
+    ] == [
         ("strict_degraded", "mkt-live-degraded", "cond-live-b", "active"),
         ("strict", "mkt-live-tradable", "cond-live-a", "active"),
     ]
     assert all(Path(row["archive_path"]).exists() for row in alerts)
     why_now_by_market = {row["market_id"]: row["why_now"] for row in alerts}
-    assert "Settlement uses certified election authority result." in why_now_by_market["mkt-live-tradable"]
-    assert "Resolves YES only if Candidate A is certified as winner." in why_now_by_market["mkt-live-tradable"]
-    assert "Settlement uses certified election authority result." in why_now_by_market["mkt-live-degraded"]
-    assert "Resolves YES only if Candidate B is certified as winner." in why_now_by_market["mkt-live-degraded"]
+    assert (
+        "Settlement uses certified election authority result."
+        in why_now_by_market["mkt-live-tradable"]
+    )
+    assert (
+        "Resolves YES only if Candidate A is certified as winner."
+        in why_now_by_market["mkt-live-tradable"]
+    )
+    assert (
+        "Settlement uses certified election authority result."
+        in why_now_by_market["mkt-live-degraded"]
+    )
+    assert (
+        "Resolves YES only if Candidate B is certified as winner."
+        in why_now_by_market["mkt-live-degraded"]
+    )
 
     clusters = conn.execute(
         "SELECT canonical_name, status FROM thesis_clusters ORDER BY id"
@@ -120,15 +135,32 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
         "SELECT condition_id, market_id, token_id, event_slug, market_slug FROM cluster_expressions ORDER BY market_id"
     ).fetchall()
     assert [
-        (row["condition_id"], row["market_id"], row["token_id"], row["event_slug"], row["market_slug"])
+        (
+            row["condition_id"],
+            row["market_id"],
+            row["token_id"],
+            row["event_slug"],
+            row["market_slug"],
+        )
         for row in expression_rows
     ] == [
-        ("cond-live-b", "mkt-live-degraded", "token-live-degraded", "live-election-2026", "candidate-b-wins-live"),
-        ("cond-live-a", "mkt-live-tradable", "token-live-tradable", "live-election-2026", "candidate-a-wins-live"),
+        (
+            "cond-live-b",
+            "mkt-live-degraded",
+            "token-live-degraded",
+            "live-election-2026",
+            "candidate-b-wins-live",
+        ),
+        (
+            "cond-live-a",
+            "mkt-live-tradable",
+            "token-live-tradable",
+            "live-election-2026",
+            "candidate-a-wins-live",
+        ),
     ]
     archive_text_by_market = {
-        row["market_id"]: Path(row["archive_path"]).read_text(encoding="utf-8")
-        for row in alerts
+        row["market_id"]: Path(row["archive_path"]).read_text(encoding="utf-8") for row in alerts
     }
     assert (
         "market: https://polymarket.com/event/live-election-2026/candidate-a-wins-live"
@@ -205,7 +237,9 @@ def test_scan_command_loads_live_news_and_x_feeds_into_judgment_context(tmp_path
             degraded_reason=None,
         )
 
-    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
     monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
 
     assert main(["scan"]) == 0
@@ -278,7 +312,9 @@ def test_scan_command_degrades_when_configured_evidence_feed_fails(tmp_path, mon
             degraded_reason=None,
         )
 
-    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
     monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
 
     assert main(["scan"]) == 0
@@ -361,7 +397,9 @@ def test_scan_command_dedupes_repeated_runs_into_the_same_alert_rows(tmp_path, m
             )
         return degraded_snapshot(token_id, "book_missing")
 
-    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
     monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
 
     assert main(["scan"]) == 0
@@ -523,7 +561,9 @@ def test_execute_monitor_flow_blocks_pending_recheck_without_llm_approval(monkey
         synced_official_positions=0,
     )
     _seed_monitor_run(paths, monitor_outcome.run_id)
-    monkeypatch.setattr("polymarket_alert_bot.runtime_flow.run_monitor", lambda *args, **kwargs: monitor_outcome)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.flows.monitor.run_monitor", lambda *args, **kwargs: monitor_outcome
+    )
 
     delivered_messages: list[str] = []
 
@@ -531,14 +571,16 @@ def test_execute_monitor_flow_blocks_pending_recheck_without_llm_approval(monkey
         delivered_messages.append(text)
         return None
 
-    monkeypatch.setattr("polymarket_alert_bot.runtime_flow._deliver_message", _capture_deliver)
+    monkeypatch.setattr("polymarket_alert_bot.flows.monitor._deliver_message", _capture_deliver)
 
     summary = execute_monitor_flow(paths)
 
     assert summary.delivered_alert_ids == ()
     assert delivered_messages == []
     assert recheck_log.exists()
-    payload_rows = [json.loads(line) for line in recheck_log.read_text(encoding="utf-8").splitlines()]
+    payload_rows = [
+        json.loads(line) for line in recheck_log.read_text(encoding="utf-8").splitlines()
+    ]
     assert len(payload_rows) == 1
     assert payload_rows[0]["context"]["candidate_facts"]["mode"] == "monitor_recheck"
     assert payload_rows[0]["context"]["candidate_facts"]["trigger_id"] == "trigger-narrative"
@@ -596,7 +638,9 @@ def test_execute_monitor_flow_delivers_pending_recheck_after_llm_approval(monkey
         synced_official_positions=0,
     )
     _seed_monitor_run(paths, monitor_outcome.run_id)
-    monkeypatch.setattr("polymarket_alert_bot.runtime_flow.run_monitor", lambda *args, **kwargs: monitor_outcome)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.flows.monitor.run_monitor", lambda *args, **kwargs: monitor_outcome
+    )
 
     delivered_messages: list[str] = []
 
@@ -604,23 +648,29 @@ def test_execute_monitor_flow_delivers_pending_recheck_after_llm_approval(monkey
         delivered_messages.append(text)
         return None
 
-    monkeypatch.setattr("polymarket_alert_bot.runtime_flow._deliver_message", _capture_deliver)
+    monkeypatch.setattr("polymarket_alert_bot.flows.monitor._deliver_message", _capture_deliver)
 
     summary = execute_monitor_flow(paths)
 
     assert len(summary.delivered_alert_ids) == 1
     assert len(delivered_messages) == 1
-    assert "market: https://polymarket.com/event/source-event/source-market" in delivered_messages[0]
+    assert (
+        "market: https://polymarket.com/event/source-event/source-market" in delivered_messages[0]
+    )
     assert recheck_log.exists()
-    payload_rows = [json.loads(line) for line in recheck_log.read_text(encoding="utf-8").splitlines()]
+    payload_rows = [
+        json.loads(line) for line in recheck_log.read_text(encoding="utf-8").splitlines()
+    ]
     assert len(payload_rows) == 1
-    assert payload_rows[0]["context"]["candidate_facts"]["trigger_id"] == "trigger-narrative-approved"
+    assert (
+        payload_rows[0]["context"]["candidate_facts"]["trigger_id"] == "trigger-narrative-approved"
+    )
 
     conn = connect_db(paths.db_path)
     monitor_alert_rows = conn.execute(
         "SELECT alert_kind, delivery_mode, market_id FROM alerts WHERE run_id = ?",
         ["run-monitor-test-approve"],
     ).fetchall()
-    assert [(row["alert_kind"], row["delivery_mode"], row["market_id"]) for row in monitor_alert_rows] == [
-        ("monitor", "immediate", "market-source")
-    ]
+    assert [
+        (row["alert_kind"], row["delivery_mode"], row["market_id"]) for row in monitor_alert_rows
+    ] == [("monitor", "immediate", "market-source")]

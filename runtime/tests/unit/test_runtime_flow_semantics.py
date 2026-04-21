@@ -18,16 +18,22 @@ def _parsed(alert_kind: str) -> ParsedJudgment:
 
 
 def test_finalize_alert_kind_downgrades_strict_when_strict_gate_is_blocked() -> None:
-    assert _finalize_alert_kind(
-        _parsed("strict"),
-        SimpleNamespace(is_degraded=False),
-        strict_allowed=False,
-    ) == "research"
+    assert (
+        _finalize_alert_kind(
+            _parsed("strict"),
+            SimpleNamespace(is_degraded=False),
+            strict_allowed=False,
+        )
+        == "research"
+    )
 
 
 def test_finalize_alert_kind_keeps_reprice_when_strict_gate_is_blocked() -> None:
-    assert _finalize_alert_kind(
-        _parsed("reprice"),
-        SimpleNamespace(is_degraded=False),
-        strict_allowed=False,
-    ) == "reprice"
+    assert (
+        _finalize_alert_kind(
+            _parsed("reprice"),
+            SimpleNamespace(is_degraded=False),
+            strict_allowed=False,
+        )
+        == "reprice"
+    )

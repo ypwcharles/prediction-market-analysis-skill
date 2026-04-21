@@ -4,7 +4,7 @@ import json
 
 from polymarket_alert_bot.cli import main
 from polymarket_alert_bot.delivery.telegram_client import TelegramMessageRef
-from polymarket_alert_bot import runtime_flow
+from polymarket_alert_bot.flows import callback as callback_flow
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 
@@ -21,7 +21,13 @@ def test_callback_command_persists_feedback_and_claim(tmp_path, monkeypatch):
             id, canonical_name, status, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?)
         """,
-        ["cluster-1", "Sample thesis", "open", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+        [
+            "cluster-1",
+            "Sample thesis",
+            "open",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+        ],
     )
     conn.execute(
         """
@@ -29,7 +35,14 @@ def test_callback_command_persists_feedback_and_claim(tmp_path, monkeypatch):
             id, run_type, status, started_at, finished_at, created_at
         ) VALUES (?, ?, ?, ?, ?, ?)
         """,
-        ["run-1", "scan", "clean", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+        [
+            "run-1",
+            "scan",
+            "clean",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+        ],
     )
     conn.execute(
         """
@@ -103,14 +116,17 @@ def test_promote_command_copies_archive_artifact(tmp_path):
     archive_path.write_text("# strict memo\n", encoding="utf-8")
     destination_dir = tmp_path / "promoted"
 
-    assert main(
-        [
-            "promote",
-            str(archive_path),
-            "--destination-dir",
-            str(destination_dir),
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "promote",
+                str(archive_path),
+                "--destination-dir",
+                str(destination_dir),
+            ]
+        )
+        == 0
+    )
 
     promoted_path = destination_dir / archive_path.name
     assert promoted_path.exists()
@@ -162,9 +178,7 @@ def test_callback_seen_acknowledges_fired_trigger(tmp_path, monkeypatch):
 
     assert main(["callback", "--payload-file", str(payload_path)]) == 0
 
-    trigger_row = conn.execute(
-        "SELECT state FROM triggers WHERE id = 'trigger-ack'"
-    ).fetchone()
+    trigger_row = conn.execute("SELECT state FROM triggers WHERE id = 'trigger-ack'").fetchone()
     assert trigger_row["state"] == "acknowledged"
 
 
@@ -174,7 +188,9 @@ def test_callback_seen_edits_message_for_visible_confirmation(tmp_path, monkeypa
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
     apply_migrations(conn)
-    _seed_alert_context(conn, alert_id="alert-visible", run_id="run-visible", cluster_id="cluster-visible")
+    _seed_alert_context(
+        conn, alert_id="alert-visible", run_id="run-visible", cluster_id="cluster-visible"
+    )
     conn.commit()
 
     calls: list[tuple[str, dict[str, object]]] = []
@@ -202,7 +218,7 @@ def test_callback_seen_edits_message_for_visible_confirmation(tmp_path, monkeypa
             calls.append(("send_message", kwargs))
             return TelegramMessageRef(chat_id=str(kwargs["chat_id"]), message_id="fallback-1")
 
-    monkeypatch.setattr(runtime_flow, "TelegramClient", FakeTelegramClient)
+    monkeypatch.setattr(callback_flow, "TelegramClient", FakeTelegramClient)
 
     payload_path = tmp_path / "ack-visible.json"
     payload_path.write_text(
@@ -255,7 +271,9 @@ def test_callback_close_thesis_closes_cluster_and_triggers(tmp_path, monkeypatch
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
     conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
     apply_migrations(conn)
-    _seed_alert_context(conn, alert_id="alert-close", run_id="run-close", cluster_id="cluster-close")
+    _seed_alert_context(
+        conn, alert_id="alert-close", run_id="run-close", cluster_id="cluster-close"
+    )
     conn.execute(
         """
         INSERT INTO triggers (
@@ -298,9 +316,7 @@ def test_callback_close_thesis_closes_cluster_and_triggers(tmp_path, monkeypatch
     cluster_row = conn.execute(
         "SELECT status, closed_reason FROM thesis_clusters WHERE id = 'cluster-close'"
     ).fetchone()
-    trigger_row = conn.execute(
-        "SELECT state FROM triggers WHERE id = 'trigger-close'"
-    ).fetchone()
+    trigger_row = conn.execute("SELECT state FROM triggers WHERE id = 'trigger-close'").fetchone()
     assert dict(cluster_row) == {
         "status": "closed",
         "closed_reason": "telegram_close_thesis",
@@ -315,7 +331,13 @@ def _seed_alert_context(conn, *, alert_id: str, run_id: str, cluster_id: str) ->
             id, canonical_name, status, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?)
         """,
-        [cluster_id, "Sample thesis", "open", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+        [
+            cluster_id,
+            "Sample thesis",
+            "open",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+        ],
     )
     conn.execute(
         """
@@ -323,7 +345,14 @@ def _seed_alert_context(conn, *, alert_id: str, run_id: str, cluster_id: str) ->
             id, run_type, status, started_at, finished_at, created_at
         ) VALUES (?, ?, ?, ?, ?, ?)
         """,
-        [run_id, "scan", "clean", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00", "2026-04-17T00:00:00+00:00"],
+        [
+            run_id,
+            "scan",
+            "clean",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+            "2026-04-17T00:00:00+00:00",
+        ],
     )
     conn.execute(
         """
