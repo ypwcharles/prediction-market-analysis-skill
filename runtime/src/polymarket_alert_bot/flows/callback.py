@@ -58,9 +58,11 @@ def execute_callback_flow(
                 "telegram_chat_id": event.telegram_chat_id,
                 "telegram_message_id": event.telegram_message_id,
                 "created_at": timestamp,
-            }
+            },
+            commit=False,
         )
     except sqlite3.IntegrityError as exc:
+        conn.rollback()
         if "feedback.callback_query_id" not in str(exc):
             raise
         existing_feedback = repo.get_feedback_by_callback_query_id(event.callback_query_id)
@@ -68,13 +70,19 @@ def execute_callback_flow(
             raise
         return _feedback_summary(existing_feedback)
 
-    _apply_feedback_side_effects(
-        conn,
-        event=event,
-        alert_row=alert_row,
-        thesis_cluster_id=resolved_thesis_cluster_id,
-        now_iso=timestamp,
-    )
+    try:
+        _apply_feedback_side_effects(
+            conn,
+            event=event,
+            alert_row=alert_row,
+            thesis_cluster_id=resolved_thesis_cluster_id,
+            now_iso=timestamp,
+            commit=False,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
     config = runtime_config or load_runtime_config()
     if os.environ.get("TELEGRAM_BOT_TOKEN") and (config.telegram_chat_id or event.telegram_chat_id):
@@ -101,7 +109,7 @@ def _feedback_summary(feedback_row) -> CallbackFlowSummary:
 
 
 def _apply_feedback_side_effects(
-    conn, *, event, alert_row, thesis_cluster_id: str, now_iso: str
+    conn, *, event, alert_row, thesis_cluster_id: str, now_iso: str, commit: bool = True
 ) -> None:
     if event.feedback_type == "claimed_buy":
         existing = conn.execute(
@@ -191,7 +199,8 @@ def _apply_feedback_side_effects(
             """,
             [now_iso, now_iso, event.alert_id],
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def _confirm_callback_feedback(*, telegram: TelegramClient, event) -> None:

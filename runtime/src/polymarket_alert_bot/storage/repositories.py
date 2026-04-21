@@ -94,7 +94,7 @@ class RuntimeRepository:
         )
         self.conn.commit()
 
-    def insert_feedback(self, payload: dict[str, Any]) -> None:
+    def insert_feedback(self, payload: dict[str, Any], *, commit: bool = True) -> None:
         columns = sorted(payload)
         self.conn.execute(
             f"""
@@ -103,7 +103,8 @@ class RuntimeRepository:
             """,
             [payload[column] for column in columns],
         )
-        self.conn.commit()
+        if commit:
+            self.conn.commit()
 
     def get_feedback_by_callback_query_id(self, callback_query_id: str) -> sqlite3.Row | None:
         return self.conn.execute(
