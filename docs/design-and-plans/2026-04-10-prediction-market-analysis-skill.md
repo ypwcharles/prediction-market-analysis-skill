@@ -22,8 +22,8 @@
 - Create: `skills/prediction-market-analysis/references/domain-adapters.md`
 - Create: `skills/prediction-market-analysis/references/research-and-open-source.md`
 - Create: `evals/evals.json`
-- Create: `docs/superpowers/specs/2026-04-10-prediction-market-analysis-skill-design.md`
-- Create: `docs/superpowers/plans/2026-04-10-prediction-market-analysis-skill.md`
+- Create: `docs/design-and-plans/2026-04-10-prediction-market-analysis-skill-design.md`
+- Create: `docs/design-and-plans/2026-04-10-prediction-market-analysis-skill.md`
 
 ### Generated / local-only during evaluation
 
@@ -363,7 +363,7 @@ Expected: `eval file OK`
 - [ ] **Step 1: Perform an inline plan/spec alignment review before implementation wrap-up**
 
 Review the created files against:
-- `docs/superpowers/specs/2026-04-10-prediction-market-analysis-skill-design.md`
+- `docs/design-and-plans/2026-04-10-prediction-market-analysis-skill-design.md`
 - this plan
 
 Check:

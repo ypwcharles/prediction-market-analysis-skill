@@ -32,18 +32,18 @@ The skill is intentionally conservative. It rejects weak setups by default, sepa
   Documentation hub for project docs, analysis notes, and internal specs.
 - `docs/market-analysis/`
   Saved market write-ups and thesis-specific research memos.
-- `docs/superpowers/specs/`
-  Skill design specifications.
-- `docs/superpowers/plans/`
-  Implementation plans.
+- `docs/design-and-plans/`
+  Project-authored design docs and implementation plans.
+- `docs/workflow-references/`
+  External gstack and Superpowers workflow docs that were directly relevant to this repo.
 
 ## Documentation Guide
 
 Start with [docs/README.md](docs/README.md) if you want the documentation map.
 
 - Use [docs/market-analysis/README.md](docs/market-analysis/README.md) for saved market notes and naming conventions.
-- Use `docs/superpowers/specs/` for the design rationale behind the skill.
-- Use `docs/superpowers/plans/` for implementation planning history.
+- Use `docs/design-and-plans/` for the project's design rationale and implementation planning history.
+- Use `docs/workflow-references/` for the small set of external gstack and Superpowers workflow documents that were relevant to this project.
 
 ## Local Usage
 

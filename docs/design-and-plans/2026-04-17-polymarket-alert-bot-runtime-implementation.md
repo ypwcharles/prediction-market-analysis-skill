@@ -4,9 +4,41 @@
 
 **Goal:** Build the first runnable Polymarket alert-bot runtime inside this repo, with scheduled scanning, Telegram delivery, action-oriented monitoring, SQLite state, calibration reporting, and archive support, while keeping `skills/prediction-market-analysis/` as a pure judgment engine.
 
-**Architecture:** The runtime lives under a dedicated `runtime/` subtree and is `Python-first`. Two scheduled jobs share one SQLite database and one private gitignored runtime-data layer: `scan` handles board discovery, evidence gathering, judgment routing, and alert generation; `monitor` handles trigger evaluation, stale/recheck logic, position reconciliation, and follow-up action alerts. Human-readable high-value artifacts are archived privately, while promoted public notes remain separate in `docs/market-analysis/`.
+**Ops Model Update (2026-04-20):** The original 2026-04-17 plan assumed Hermes/OpenClaw would remain the runtime shell. That assumption is superseded by the approved Docker-first service-shell delta in [2026-04-20-polymarket-alert-bot-runtime-ops-delta.md](/Users/peiwenyang/Development/polymarket-research/docs/design-and-plans/2026-04-20-polymarket-alert-bot-runtime-ops-delta.md). This implementation plan now treats the alert bot itself as the long-running runtime shell, while Hermes/OpenClaw become optional operator clients.
 
-**Tech Stack:** Python 3.12+, `uv`, `pytest`, `httpx`, `pydantic`, stdlib `sqlite3`, stdlib `argparse`, Telegram Bot API, Polymarket official API, Gamma API, CLOB book endpoints.
+**Architecture:** The runtime lives under a dedicated `runtime/` subtree and is `Python-first`. A single Dockerized runtime service owns scheduling, Telegram send path, Telegram webhook ingress, SQLite state, archive/report output, and a thin authenticated HTTP control plane. Internally, the service still reuses the existing `scan`, `monitor`, `report`, `callback`, and `promote` flow boundaries. Human-readable high-value artifacts are archived privately, while promoted public notes remain separate in `docs/market-analysis/`.
+
+**Tech Stack:** Python 3.12+, `uv`, `pytest`, `httpx`, `pydantic`, `fastapi`, `uvicorn`, stdlib `sqlite3`, stdlib `argparse`, Telegram Bot API, Polymarket official API, Gamma API, CLOB book endpoints, Docker.
+
+## Runtime Shell Diagram
+
+```text
+                      +--------------------------------------+
+                      | Docker runtime service               |
+                      | polymarket-alert-bot                 |
+                      |                                      |
+                      |  scheduler                           |
+                      |   +--> scan tick -----------------+  |
+                      |   +--> monitor tick -------------+|  |
+                      |   +--> report tick -------------+||  |
+                      |                                  ||  |
+Admin HTTP -----------+-> /internal/scan --------------+||  |
+(Hermes/OpenClaw)     |-> /internal/monitor ----------+|||  |
+                      |-> /internal/report -----------+||||  |
+                      |-> /status                     ||||  |
+                      |-> /healthz                    ||||  |
+                      |                               ||||  |
+Telegram webhook -----+-> /telegram/webhook ---------+|||  |
+                      |      CallbackRouter            |||  |
+CLI one-shot ---------+-> same flow functions --------++|  |
+                      |                               | |  |
+                      |           SQLite <------------+ |  |
+                      |             |                   |  |
+                      |             +--> archives       |  |
+                      |             +--> reports        |  |
+                      |             +--> Telegram send  |  |
+                      +--------------------------------------+
+```
 
 ---
 
@@ -14,6 +46,9 @@
 
 ### Create
 
+- `runtime/Dockerfile`
+- `runtime/.env.example`
+- `runtime/docker-compose.example.yml`
 - `runtime/pyproject.toml`
 - `runtime/README.md`
 - `runtime/src/polymarket_alert_bot/__init__.py`
@@ -50,6 +85,10 @@
 - `runtime/src/polymarket_alert_bot/delivery/__init__.py`
 - `runtime/src/polymarket_alert_bot/delivery/telegram_client.py`
 - `runtime/src/polymarket_alert_bot/delivery/callback_router.py`
+- `runtime/src/polymarket_alert_bot/service/__init__.py`
+- `runtime/src/polymarket_alert_bot/service/app.py`
+- `runtime/src/polymarket_alert_bot/service/auth.py`
+- `runtime/src/polymarket_alert_bot/service/scheduler.py`
 - `runtime/src/polymarket_alert_bot/monitor/__init__.py`
 - `runtime/src/polymarket_alert_bot/monitor/position_sync.py`
 - `runtime/src/polymarket_alert_bot/monitor/trigger_engine.py`
@@ -76,21 +115,27 @@
 - `runtime/tests/integration/test_monitor_pipeline.py`
 - `runtime/tests/integration/test_callback_reconciliation.py`
 - `runtime/tests/integration/test_calibration_report.py`
+- `runtime/tests/integration/test_service_endpoints.py`
+- `runtime/tests/integration/test_service_scheduler.py`
 - `runtime/tests/snapshots/strict_memo.txt`
 - `runtime/tests/snapshots/research_digest.txt`
 - `runtime/tests/snapshots/monitor_alert.txt`
 - `runtime/tests/snapshots/heartbeat.txt`
+- `.github/workflows/runtime-image.yml`
 
 ### Modify
 
 - `.gitignore`
 - `docs/README.md`
-- `docs/superpowers/plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md`
+- `docs/design-and-plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md`
 
 ### Runtime Tree
 
 ```text
 runtime/
+  Dockerfile
+  .env.example
+  docker-compose.example.yml
   pyproject.toml
   README.md
   src/polymarket_alert_bot/
@@ -136,6 +181,11 @@ runtime/
       __init__.py
       telegram_client.py
       callback_router.py
+    service/
+      __init__.py
+      app.py
+      auth.py
+      scheduler.py
     monitor/
       __init__.py
       position_sync.py
@@ -161,12 +211,15 @@ runtime/
   archives/
   reports/
   locks/
+
+.github/workflows/
+  runtime-image.yml
 ```
 
 ### Responsibility Map
 
 - `runtime/src/polymarket_alert_bot/cli.py`
-  Single CLI entrypoint with subcommands for `scan`, `monitor`, and `report`.
+  CLI entrypoint retained for one-shot runs, smoke tests, debugging, and backward-compatible automation.
 - `config/`
   Repo-versioned runtime settings and source registry loading.
 - `models/`
@@ -183,12 +236,16 @@ runtime/
   Canonical Telegram renderers for `STRICT`, `RESEARCH`, `MONITOR`, and `HEARTBEAT/DEGRADED`.
 - `delivery/`
   Telegram send/edit/button handling and callback event translation.
+- `service/`
+  Thin HTTP transport layer, scheduler ownership, webhook ingress, and control-plane auth. Must call existing runtime flows rather than duplicate domain logic.
 - `monitor/`
   Position sync, structured trigger evaluation, stale/recheck logic, and action escalation.
 - `calibration/`
   Metrics rollups plus markdown/SQLite calibration report output.
 - `archive/`
   Private high-value artifact persistence and optional manual promotion helper into `docs/market-analysis/`.
+- `runtime/Dockerfile`, `runtime/.env.example`, `runtime/docker-compose.example.yml`, `.github/workflows/runtime-image.yml`
+  Minimum distribution path for a single-instance Docker deployment.
 
 ## SQLite Schema
 
@@ -917,9 +974,98 @@ Expected:
 - [x] **Step 6: Commit**
 
 ```bash
-git add runtime docs/README.md .gitignore docs/superpowers/plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md
+git add runtime docs/README.md .gitignore docs/design-and-plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md
 git commit -m "feat: scaffold polymarket alert bot runtime"
 ```
+
+## Task 10: Add Docker Service Shell, Webhook Ingress, and Distribution Skeleton
+
+**Files:**
+- Create: `runtime/Dockerfile`
+- Create: `runtime/.env.example`
+- Create: `runtime/docker-compose.example.yml`
+- Create: `runtime/src/polymarket_alert_bot/service/__init__.py`
+- Create: `runtime/src/polymarket_alert_bot/service/app.py`
+- Create: `runtime/src/polymarket_alert_bot/service/auth.py`
+- Create: `runtime/src/polymarket_alert_bot/service/scheduler.py`
+- Create: `runtime/tests/integration/test_service_endpoints.py`
+- Create: `runtime/tests/integration/test_service_scheduler.py`
+- Create: `.github/workflows/runtime-image.yml`
+- Modify: `runtime/src/polymarket_alert_bot/cli.py`
+- Modify: `runtime/README.md`
+- Modify: `docs/design-and-plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md`
+
+- [ ] **Step 1: Write failing service integration tests**
+
+Cover:
+- `POST /internal/scan`
+- `POST /internal/monitor`
+- `POST /internal/report`
+- `POST /telegram/webhook`
+- `GET /healthz`
+- `GET /status`
+- unauthorized access to `/internal/*`
+- webhook secret validation failure
+
+- [ ] **Step 2: Add a thin service app**
+
+Rules:
+- the service must call existing flow functions
+- no duplicated scan/monitor/report business logic
+- CLI and HTTP must share the same runtime core
+- service remains single-instance by design
+
+- [ ] **Step 3: Add control-plane auth**
+
+V1 auth shape:
+- webhook secret validation for Telegram ingress
+- one shared bearer token for `/status` and `/internal/*`
+- no user accounts
+- no OAuth
+- no RBAC
+
+- [ ] **Step 4: Add scheduler ownership to the runtime service**
+
+Rules:
+- runtime service owns the default scheduler
+- preserve CLI one-shot commands
+- enforce lock-based overlap prevention
+- do not introduce distributed scheduling or leader election
+
+- [ ] **Step 5: Package the service for Docker-first operation**
+
+Must include:
+- `Dockerfile`
+- `.env.example`
+- `docker-compose.example.yml`
+- persistent volume documentation
+- base URL and Telegram webhook notes
+
+- [ ] **Step 6: Add minimum distribution pipeline**
+
+Create one CI workflow that builds the runtime image.
+
+Not required in this round:
+- polished public release automation
+- multi-arch publishing matrix
+- registry release management
+
+- [ ] **Step 7: Run service-level verification**
+
+Run:
+```bash
+cd runtime && uv run pytest tests/integration/test_service_endpoints.py tests/integration/test_service_scheduler.py -q
+```
+
+Then run one containerized smoke path:
+```bash
+cd runtime && docker build -t polymarket-alert-bot:local .
+```
+
+Expected:
+- image builds successfully
+- health/status surface is reachable in test mode
+- runtime can still execute one scan and one monitor path without logic divergence
 
 ## Spec Coverage
 
@@ -927,7 +1073,7 @@ Covered in this plan:
 
 - dedicated `runtime/` subtree
 - Python-first single-package runtime
-- separate `scan` and `monitor` jobs
+- separate `scan` and `monitor` flows
 - SQLite operational schema
 - source registry
 - strict/research/degraded routing
@@ -936,16 +1082,24 @@ Covered in this plan:
 - position reconciliation
 - calibration report
 - private archive layer
+- Dockerized service shell
+- direct Telegram webhook ingress
+- thin authenticated HTTP control plane
+- minimum Docker distribution path
 
 Explicitly not covered in code implementation for this round:
 
 - auto-execution
 - dashboard
 - automatic public promotion into `docs/market-analysis/`
+- active-active replicas
+- distributed scheduling
+- multi-tenant auth
+- Kubernetes or multi-service orchestration
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md`. Two execution options:
+Plan complete and saved to `docs/design-and-plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 

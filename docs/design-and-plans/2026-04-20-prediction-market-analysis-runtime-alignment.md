@@ -690,7 +690,7 @@ This plan contains no unresolved placeholders or deferred "handle later" instruc
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-04-20-prediction-market-analysis-runtime-alignment.md`. Two execution options:
+Plan complete and saved to `docs/design-and-plans/2026-04-20-prediction-market-analysis-runtime-alignment.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 

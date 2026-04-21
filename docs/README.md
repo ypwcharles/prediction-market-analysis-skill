@@ -6,18 +6,18 @@ This directory stores the project documentation that sits around the reusable sk
 
 - `market-analysis/`
   Archived market write-ups, thesis memos, and scan notes saved from live analysis sessions.
-- `superpowers/specs/`
-  Design specs for the skill and its operating model.
-- `superpowers/plans/`
-  Implementation plans and project-planning artifacts.
+- `design-and-plans/`
+  Project-authored design docs and implementation plans.
+- `workflow-references/`
+  External gstack and Superpowers workflow docs that were directly relevant to this repo.
 
 ## Where To Start
 
 - Read [`../README.md`](../README.md) for the project overview.
 - Read [`market-analysis/README.md`](market-analysis/README.md) for the market-note index and naming conventions.
-- Read `superpowers/specs/` if you want the product and workflow rationale behind the skill.
-- Read `superpowers/plans/` if you want the implementation history.
-- The Polymarket alert-bot runtime plan lives in `superpowers/plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md`. Runtime archives live under repo-root `.runtime-data/` and are private, gitignored run artifacts.
+- Read `design-and-plans/` if you want the project's design rationale and implementation history.
+- Read `workflow-references/` if you want the external gstack and Superpowers documents that were relevant here.
+- The Polymarket alert-bot runtime plan lives in `design-and-plans/2026-04-17-polymarket-alert-bot-runtime-implementation.md`. Runtime archives live under repo-root `.runtime-data/` and are private, gitignored run artifacts.
 
 ## Documentation Conventions
 
