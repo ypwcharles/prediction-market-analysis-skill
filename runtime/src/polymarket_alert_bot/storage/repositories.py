@@ -105,6 +105,16 @@ class RuntimeRepository:
         )
         self.conn.commit()
 
+    def get_feedback_by_callback_query_id(self, callback_query_id: str) -> sqlite3.Row | None:
+        return self.conn.execute(
+            """
+            SELECT *
+            FROM feedback
+            WHERE callback_query_id = ?
+            """,
+            [callback_query_id],
+        ).fetchone()
+
     def insert_triggers(self, payloads: list[dict[str, Any]]) -> None:
         if not payloads:
             return

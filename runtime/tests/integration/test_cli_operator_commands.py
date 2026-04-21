@@ -266,6 +266,63 @@ def test_callback_seen_edits_message_for_visible_confirmation(tmp_path, monkeypa
     ]
 
 
+def test_callback_replay_is_idempotent(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    apply_migrations(conn)
+    _seed_alert_context(
+        conn, alert_id="alert-replay", run_id="run-replay", cluster_id="cluster-replay"
+    )
+    conn.commit()
+
+    payload_path = tmp_path / "callback-replay.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "callback_query": {
+                    "id": "cb-replay",
+                    "data": "fb:ordered:alert-replay:cluster-replay",
+                    "from": {"id": 12345},
+                    "message": {
+                        "message_id": 59,
+                        "chat": {"id": -100123456},
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["callback", "--payload-file", str(payload_path)]) == 0
+    assert main(["callback", "--payload-file", str(payload_path)]) == 0
+
+    feedback_rows = conn.execute(
+        """
+        SELECT callback_query_id, feedback_type, telegram_message_id
+        FROM feedback
+        ORDER BY created_at, id
+        """
+    ).fetchall()
+    assert [dict(row) for row in feedback_rows] == [
+        {
+            "callback_query_id": "cb-replay",
+            "feedback_type": "claimed_buy",
+            "telegram_message_id": "59",
+        }
+    ]
+
+    claim_rows = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM positions
+        WHERE truth_source = 'telegram_claim'
+        """
+    ).fetchone()[0]
+    assert claim_rows == 1
+
+
 def test_callback_close_thesis_closes_cluster_and_triggers(tmp_path, monkeypatch):
     data_dir = tmp_path / ".runtime-data"
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))

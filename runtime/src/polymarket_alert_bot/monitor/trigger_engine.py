@@ -151,8 +151,12 @@ def evaluate_stored_trigger(
     observation_key = observation_key_for_threshold(baseline.get("threshold_kind"))
     observation = observations.get(observation_key)
     if is_narrative_trigger(baseline):
+        updated = deepcopy(baseline)
+        if updated.get("state") in {"armed", "rearmed"}:
+            updated["state"] = "fired"
+            updated["last_fired_at"] = now.isoformat()
         return {
-            "updated_trigger": baseline,
+            "updated_trigger": updated,
             "fired": False,
             "requires_llm_recheck": True,
             "observation": observation,

@@ -85,4 +85,5 @@ def test_evaluate_stored_trigger_marks_narrative_for_recheck():
     assert result["fired"] is False
     assert result["requires_llm_recheck"] is True
     assert result["observation"] == "escalation"
-    assert result["updated_trigger"]["state"] == "armed"
+    assert result["updated_trigger"]["state"] == "fired"
+    assert result["updated_trigger"]["last_fired_at"] == now.isoformat()

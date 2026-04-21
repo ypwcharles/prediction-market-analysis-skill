@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -35,6 +36,9 @@ def execute_callback_flow(
     conn = connect_db(paths.db_path)
     apply_migrations(conn)
     repo = RuntimeRepository(conn)
+    existing_feedback = repo.get_feedback_by_callback_query_id(event.callback_query_id)
+    if existing_feedback is not None:
+        return _feedback_summary(existing_feedback)
     alert_row = repo.get_alert(event.alert_id)
     if alert_row is None:
         raise RuntimeError(f"unknown alert_id in callback payload: {event.alert_id}")
@@ -42,18 +46,27 @@ def execute_callback_flow(
     if not resolved_thesis_cluster_id:
         raise RuntimeError(f"unable to resolve thesis_cluster_id for alert_id: {event.alert_id}")
 
-    repo.insert_feedback(
-        {
-            "id": str(uuid4()),
-            "alert_id": event.alert_id,
-            "thesis_cluster_id": resolved_thesis_cluster_id,
-            "feedback_type": event.feedback_type,
-            "payload_json": json.dumps(event.payload, sort_keys=True),
-            "telegram_chat_id": event.telegram_chat_id,
-            "telegram_message_id": event.telegram_message_id,
-            "created_at": timestamp,
-        }
-    )
+    try:
+        repo.insert_feedback(
+            {
+                "id": str(uuid4()),
+                "alert_id": event.alert_id,
+                "thesis_cluster_id": resolved_thesis_cluster_id,
+                "feedback_type": event.feedback_type,
+                "callback_query_id": event.callback_query_id,
+                "payload_json": json.dumps(event.payload, sort_keys=True),
+                "telegram_chat_id": event.telegram_chat_id,
+                "telegram_message_id": event.telegram_message_id,
+                "created_at": timestamp,
+            }
+        )
+    except sqlite3.IntegrityError as exc:
+        if "feedback.callback_query_id" not in str(exc):
+            raise
+        existing_feedback = repo.get_feedback_by_callback_query_id(event.callback_query_id)
+        if existing_feedback is None:
+            raise
+        return _feedback_summary(existing_feedback)
 
     _apply_feedback_side_effects(
         conn,
@@ -76,6 +89,14 @@ def execute_callback_flow(
         alert_id=event.alert_id,
         thesis_cluster_id=resolved_thesis_cluster_id,
         feedback_type=event.feedback_type,
+    )
+
+
+def _feedback_summary(feedback_row) -> CallbackFlowSummary:
+    return CallbackFlowSummary(
+        alert_id=str(feedback_row["alert_id"]),
+        thesis_cluster_id=str(feedback_row["thesis_cluster_id"]),
+        feedback_type=str(feedback_row["feedback_type"]),
     )
 
 

@@ -184,7 +184,7 @@ def test_run_monitor_evaluates_triggers_and_reconciles_claims(monkeypatch, tmp_p
     }
     assert trigger_states == {
         "trg-size": "fired",
-        "trg-narrative": "armed",
+        "trg-narrative": "fired",
     }
 
     alert_status = conn.execute("SELECT status FROM alerts WHERE id = 'alert-stale'").fetchone()[
@@ -199,6 +199,11 @@ def test_run_monitor_evaluates_triggers_and_reconciles_claims(monkeypatch, tmp_p
     assert alert_status == "stale"
     assert cluster_status == "pending_recheck"
     assert (claim_row["status"], claim_row["truth_source"]) == ("open", "official_api")
+
+    second_outcome = run_monitor(paths, official_positions_payload=official_payload, now=now)
+    assert second_outcome.fired_actions == []
+    assert second_outcome.pending_recheck_actions == []
+    assert second_outcome.requires_llm_recheck_trigger_ids == []
 
 
 def test_run_monitor_uses_live_orderbook_for_price_triggers(monkeypatch, tmp_path):

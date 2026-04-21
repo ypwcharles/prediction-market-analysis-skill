@@ -36,7 +36,12 @@ def test_schema_includes_runtime_reconciliation_columns(tmp_path):
 
     assert {"condition_id", "market_id", "token_id"} <= alert_columns
     assert {"condition_id", "market_id", "token_id"} <= expression_columns
-    assert {"payload_json", "telegram_chat_id", "telegram_message_id"} <= feedback_columns
+    assert {
+        "callback_query_id",
+        "payload_json",
+        "telegram_chat_id",
+        "telegram_message_id",
+    } <= feedback_columns
 
 
 def test_schema_enforces_unique_alert_dedupe_keys(tmp_path):

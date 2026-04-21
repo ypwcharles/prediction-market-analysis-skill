@@ -138,6 +138,7 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             alert_id TEXT NOT NULL,
             thesis_cluster_id TEXT NOT NULL,
             feedback_type TEXT NOT NULL,
+            callback_query_id TEXT,
             payload_json TEXT,
             telegram_chat_id TEXT,
             telegram_message_id TEXT,
@@ -177,11 +178,18 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     )
     _ensure_column(conn, "cluster_expressions", "condition_id", "TEXT")
     _ensure_column(conn, "alerts", "condition_id", "TEXT")
+    _ensure_column(conn, "feedback", "callback_query_id", "TEXT")
     _dedupe_alert_rows(conn)
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS alerts_dedupe_key_unique
         ON alerts(dedupe_key)
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS feedback_callback_query_id_unique
+        ON feedback(callback_query_id)
         """
     )
     conn.commit()
