@@ -87,7 +87,7 @@ Ask:
 Ask:
 
 1. Does this evidence change when the event happens, not merely whether it happens?
-2. Does it speak to a hard calendar, procedural gate, or operational bottleneck?
+2. Does it speak to a hard calendar, procedural gate, operational bottleneck, or institutional incentive to wait?
 3. Would this still matter if the deadline moved back by a month?
 
 If the answer to the third question is yes, it may be direction evidence rather than timing evidence.
@@ -177,6 +177,21 @@ Treat the following as timing-relevant when verified:
 - known logistics, settlement, or delivery constraints
 - official statements that narrow timing rather than merely tone
 
+Treat the following as timing-relevant for earlier non-occurrence positions when verified:
+
+- official emphasis on wanting more data before acting
+- explicit preference to preserve optionality
+- close upcoming meetings or windows that lower the cost of waiting
+- institutional norms of moving only with consensus or updated forecasts
+- evidence that acting now carries more reputational or policy cost than waiting
+
+These often leave the broad thesis alive while weakening the immediate-action bucket.
+
+For clarity:
+
+- in binary markets, the earlier non-occurrence leg is often `No`
+- in multi-outcome markets, it can be `Yes` on a named no-action bucket such as `No change`
+
 An event becoming more likely eventually is not enough to justify buying a narrow `Yes` bucket.
 And a broad thesis becoming more likely is not enough to justify buying a narrower rule-scope contract.
 
@@ -192,6 +207,21 @@ Probability should move only when the evidence:
 Information can be true and still fail this test.
 
 For time-bucket trades, probability should move only when the evidence changes the deadline-sensitive path, not just the eventual outcome.
+
+For institutional-decision markets, probability should also move when the evidence changes the chance of waiting despite eventual action.
+
+## Deferred-Action Evidence
+
+Central banks, regulators, courts, boards, and committees often have real option value in waiting.
+
+Treat deferability as genuine timing evidence when primary sources show:
+
+- patience or data dependence is still the stated base case
+- another scheduled meeting or decision window is close enough to matter
+- the institution can preserve credibility by waiting rather than forcing action now
+- the broader thesis remains intact even if the immediate window misses
+
+Do not dismiss this as mere rhetoric when the institution has both the ability and the incentive to defer.
 
 ## When Evidence Is Too Weak To Proceed
 
@@ -221,3 +251,4 @@ For narrow buckets, add:
 
 6. Does this matter for this deadline, or only for the broader event?
 7. Does this matter for this contract language, or only for a broader related event?
+8. Does this support action now, or only action eventually?
