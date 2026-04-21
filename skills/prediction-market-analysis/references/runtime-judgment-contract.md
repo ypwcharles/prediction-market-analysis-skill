@@ -132,7 +132,7 @@ Optional citation metadata:
 - `source_name`
 - `source_tier`
 - `fetched_at`
-- `confidence`
+- `confidence` (numeric if the runner can price it precisely, otherwise a short label such as `high`, `medium`, or `low`)
 
 ## 7) Trigger Rules
 `triggers` must contain only real future checks. Allowed trigger classes:
@@ -151,5 +151,5 @@ Include when available:
 - `summary`
 - `thesis`
 - `thesis_cluster_id`
-- `trigger_payload`
+- `trigger_payload` (either one machine-readable object or a list of machine-readable trigger snapshots)
 - `trigger_metadata`
