@@ -410,33 +410,8 @@ If the input is thematic and multiple candidate markets are discovered:
 ### Runtime Judgment Mode
 
 Return exactly one JSON object that conforms to `references/runtime-judgment-contract.md`.
-The field lists below are a quick reference only; `references/runtime-judgment-contract.md` is the source of truth and supersedes this summary.
-
-Required top-level fields:
-
-- `alert_kind`
-- `cluster_action`
-- `ttl_hours`
-- `citations`
-- `triggers`
-- `archive_payload`
-
-Recommended top-level fields:
-
-- `thesis`
-- `side`
-- `theoretical_edge_cents`
-- `executable_edge_cents`
-- `max_entry_cents`
-- `suggested_size_usdc`
-- `why_now`
-- `kill_criteria_text`
-- `summary`
-- `watch_item`
-- `evidence_fresh_until`
-- `recheck_required_at`
-
-Use `references/runtime-judgment-contract.md` as the source of truth for enum values, mapping rules, and any schema changes.
+Use `references/runtime-judgment-contract.md` as the source of truth for required fields, recommended fields, enum values, mapping rules, and any schema changes.
+Do not treat this skill file as a second schema definition.
 
 ## Archetype-Specific Standards
 

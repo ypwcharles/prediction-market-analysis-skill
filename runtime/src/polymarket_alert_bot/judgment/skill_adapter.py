@@ -7,8 +7,12 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
-from polymarket_alert_bot.judgment.result_parser import ParsedJudgment, ParseError, parse_judgment_result
-
+from polymarket_alert_bot.judgment.contract import runtime_request_envelope
+from polymarket_alert_bot.judgment.result_parser import (
+    ParsedJudgment,
+    ParseError,
+    parse_judgment_result,
+)
 
 SkillRunner = Callable[[dict[str, Any], int], dict[str, Any] | str]
 ExternalCommandRunner = Callable[[list[str], str, int], dict[str, Any] | str]
@@ -32,43 +36,7 @@ class SkillAdapter:
         self._external_runner = external_runner or self._run_external_command
 
     def build_payload(self, context: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "contract_version": "runtime.v1",
-            "context": context,
-            "response_schema": {
-                "required": [
-                    "alert_kind",
-                    "cluster_action",
-                    "ttl_hours",
-                    "citations",
-                    "triggers",
-                    "archive_payload",
-                ],
-                "recommended": [
-                    "thesis",
-                    "side",
-                    "theoretical_edge_cents",
-                    "executable_edge_cents",
-                    "max_entry_cents",
-                    "suggested_size_usdc",
-                    "why_now",
-                    "kill_criteria_text",
-                    "summary",
-                    "watch_item",
-                    "evidence_fresh_until",
-                    "recheck_required_at",
-                ],
-                "alert_kind_enum": [
-                    "strict",
-                    "strict_degraded",
-                    "research",
-                    "reprice",
-                    "monitor",
-                    "heartbeat",
-                    "degraded",
-                ],
-            },
-        }
+        return runtime_request_envelope(context)
 
     def judge(self, context: dict[str, Any]) -> ParsedJudgment:
         payload = self.build_payload(context)
@@ -104,7 +72,9 @@ class SkillAdapter:
         if isinstance(command, str):
             text = command.strip()
             return SkillAdapter._split_command_text(text) if text else []
-        return SkillAdapter._coalesce_inline_script([str(part).strip() for part in command if str(part).strip()])
+        return SkillAdapter._coalesce_inline_script(
+            [str(part).strip() for part in command if str(part).strip()]
+        )
 
     @staticmethod
     def _coalesce_inline_script(parts: list[str]) -> list[str]:
@@ -145,7 +115,9 @@ class SkillAdapter:
 
         if completed.returncode != 0:
             stderr_text = (completed.stderr or "").strip()
-            raise RuntimeError(f"external runner exited with code {completed.returncode}: {stderr_text}")
+            raise RuntimeError(
+                f"external runner exited with code {completed.returncode}: {stderr_text}"
+            )
 
         stdout_text = (completed.stdout or "").strip()
         if not stdout_text:

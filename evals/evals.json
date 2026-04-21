@@ -94,10 +94,9 @@
       ],
       "expectations": [
         "The output is a single JSON object, not markdown.",
-        "The output contains alert_kind, cluster_action, ttl_hours, citations, triggers, and archive_payload.",
+        "The output contains the required runtime.v1 top-level fields from the canonical contract.",
         "The output does not include the literal interactive header '1. Verdict'.",
-        "The output uses a runtime alert kind instead of the literal verdict TRADE or NO TRADE.",
-        "The output sets alert_kind to one of: strict, strict_degraded, research, reprice, monitor, heartbeat, degraded.",
+        "The output uses a valid runtime alert kind from the canonical contract instead of the literal verdict TRADE or NO TRADE.",
         "The output includes at least one runtime-meaningful explanatory field (for example: why_now, summary, watch_item, or kill_criteria_text)."
       ]
     },
@@ -126,7 +125,7 @@
       ],
       "expectations": [
         "The output is a single JSON object, not markdown.",
-        "The output contains alert_kind, cluster_action, ttl_hours, citations, triggers, and archive_payload.",
+        "The output contains the required runtime.v1 top-level fields from the canonical contract.",
         "The output sets alert_kind to degraded for activation-incomplete fallback.",
         "The output sets archive_payload.reason to activation_incomplete.",
         "The output sets cluster_action to none for activation-incomplete fallback.",

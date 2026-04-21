@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
 from polymarket_alert_bot.config.source_registry import load_source_registry
+from polymarket_alert_bot.judgment.contract import ALERT_KINDS, CLUSTER_ACTIONS, CONTRACT_VERSION
 from polymarket_alert_bot.judgment.result_parser import ParseError, parse_judgment_result
 from polymarket_alert_bot.judgment.skill_adapter import SkillAdapter
 from polymarket_alert_bot.sources.evidence_enricher import enrich_evidence
 from polymarket_alert_bot.sources.news_client import NewsClient
 from polymarket_alert_bot.sources.x_client import XClient
-
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -22,11 +22,14 @@ def _load_fixture(name: str) -> list[dict[str, object]]:
         return json.load(handle)
 
 
-@pytest.mark.parametrize("alert_kind", ["strict", "strict_degraded", "research"])
-def test_parse_judgment_result_accepts_core_alert_kinds(alert_kind: str) -> None:
+@pytest.mark.parametrize("alert_kind", ALERT_KINDS)
+@pytest.mark.parametrize("cluster_action", CLUSTER_ACTIONS)
+def test_parse_judgment_result_accepts_canonical_runtime_enums(
+    alert_kind: str, cluster_action: str
+) -> None:
     payload = {
         "alert_kind": alert_kind,
-        "cluster_action": "update",
+        "cluster_action": cluster_action,
         "ttl_hours": 6,
         "citations": [
             {
@@ -42,7 +45,7 @@ def test_parse_judgment_result_accepts_core_alert_kinds(alert_kind: str) -> None
     parsed = parse_judgment_result(payload)
 
     assert parsed.alert_kind == alert_kind
-    assert parsed.cluster_action == "update"
+    assert parsed.cluster_action == cluster_action
     assert parsed.ttl_hours == 6
     assert len(parsed.citations) == 1
     assert len(parsed.triggers) == 1
@@ -127,7 +130,7 @@ def test_skill_adapter_external_command_runner_success() -> None:
 
     assert parsed.alert_kind == "monitor"
     assert parsed.cluster_action == "update"
-    assert parsed.archive_payload["echo_contract"] == "runtime.v1"
+    assert parsed.archive_payload["echo_contract"] == CONTRACT_VERSION
 
 
 def test_skill_adapter_degrades_when_no_runner_is_configured() -> None:

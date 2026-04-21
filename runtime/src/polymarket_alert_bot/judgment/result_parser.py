@@ -1,20 +1,16 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-AllowedAlertKind = Literal[
-    "strict",
-    "strict_degraded",
-    "research",
-    "reprice",
-    "monitor",
-    "heartbeat",
-    "degraded",
-]
-AllowedClusterAction = Literal["create", "update", "hold", "close", "none"]
+from polymarket_alert_bot.judgment.contract import (
+    ALERT_KINDS,
+    CLUSTER_ACTIONS,
+    is_valid_alert_kind,
+    is_valid_cluster_action,
+)
 
 
 class ParseError(ValueError):
@@ -121,8 +117,8 @@ class ArchivePayload(BaseModel):
 
 
 class ParsedJudgment(BaseModel):
-    alert_kind: AllowedAlertKind
-    cluster_action: AllowedClusterAction
+    alert_kind: str
+    cluster_action: str
     ttl_hours: int = Field(ge=0, default=0)
     thesis: str | None = None
     side: str | None = None
@@ -156,6 +152,16 @@ class ParsedJudgment(BaseModel):
         parsed_archive = ArchivePayload.model_validate(archive_payload)
         payload["archive_payload"] = parsed_archive.model_dump(exclude_none=True)
         return payload
+
+    @model_validator(mode="after")
+    def _validate_runtime_enums(self) -> "ParsedJudgment":
+        if not is_valid_alert_kind(self.alert_kind):
+            allowed = ", ".join(ALERT_KINDS)
+            raise ValueError(f"alert_kind must be one of: {allowed}")
+        if not is_valid_cluster_action(self.cluster_action):
+            allowed = ", ".join(CLUSTER_ACTIONS)
+            raise ValueError(f"cluster_action must be one of: {allowed}")
+        return self
 
     @classmethod
     def degraded(cls, reason: str) -> "ParsedJudgment":

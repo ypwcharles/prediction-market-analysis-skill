@@ -1,5 +1,8 @@
 # Runtime Judgment Contract (`runtime.v1`)
 
+Canonical source of truth: `runtime/src/polymarket_alert_bot/judgment/contract.py`.
+This markdown file is a human-readable derivative reference and must stay aligned with the contract parity tests.
+
 ## 1) Scope and Activation
 
 ### Scope Gate
