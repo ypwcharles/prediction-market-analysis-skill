@@ -1,0 +1,9 @@
+{
+  "contract_version": "runtime.v1",
+  "context": {
+    "candidate_facts": {
+      "market_id": "pm_activation_incomplete_example",
+      "market_question": "Activation-incomplete runtime envelope coverage case"
+    }
+  }
+}

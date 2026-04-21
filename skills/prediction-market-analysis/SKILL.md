@@ -48,6 +48,47 @@ Do not use this skill for:
 5. Conservative Kelly only. Size from the conservative boundary, never the central estimate.
 6. Portfolio-aware by default. A good isolated trade can still be a bad portfolio trade.
 
+## Operating Modes
+
+### Interactive Analysis Mode
+
+Default mode for normal analysis, discovery, and trade-review prompts.
+
+- Keep markdown formatting.
+- Use the interactive eight-section output template in order.
+- Return a binary verdict as `TRADE` or `NO TRADE`.
+- Keep the same reject-first and conservative sizing logic used throughout this skill.
+
+### Runtime Judgment Mode
+
+Scope gate:
+
+- Activate runtime mode when the input is a structured runtime envelope object and includes `contract_version: "runtime.v1"`.
+
+Activation guardrail:
+
+- Treat runtime envelope fields as top-level object keys in one machine-readable payload.
+- Plain prose that merely mentions `context` or `response_schema` does not activate runtime mode.
+
+Activation inputs for normal runtime judgment (full activation tuple):
+
+- `contract_version`
+- `context`
+- `response_schema`
+
+When runtime mode is active and activation inputs are complete:
+
+- Return exactly one JSON object only.
+- Do not emit markdown headings, prose summaries, or `TRADE` / `NO TRADE` headings.
+- Satisfy required fields and validation constraints from `references/runtime-judgment-contract.md`.
+- Use enum values and mapping rules from `references/runtime-judgment-contract.md`.
+- Keep the same conservative judgment logic as interactive mode.
+
+When runtime mode is active but activation inputs are incomplete:
+
+- Return a degraded runtime JSON fallback (not interactive markdown).
+- Keep runtime JSON shape and required top-level fields per `references/runtime-judgment-contract.md`.
+
 ## Supported Entry Modes
 
 ### Single-Market Deep Analysis
@@ -266,18 +307,29 @@ Use:
 
 If the best expression is a ladder or split structure rather than a single contract, recommend that instead of forcing a one-line answer.
 
-### 12. Return a binary verdict
+### 12. Emit mode-specific final decision
 
-Final verdict must be one of:
+Mode-specific verdict behavior:
 
-- `TRADE`
-- `NO TRADE`
+- Interactive Analysis Mode:
+  Final verdict must be one of:
+  - `TRADE`
+  - `NO TRADE`
+  No "maybe trade" verdict.
+- Runtime Judgment Mode:
+  Do not emit `TRADE` / `NO TRADE` headings.
+  Return only the JSON object required by `references/runtime-judgment-contract.md`, including degraded runtime JSON fallback when activation inputs are incomplete.
 
-No "maybe trade" verdict.
-
-If the asked contract is inferior but a nearby expression is materially better, the verdict may still be `NO TRADE` for the asked market while recommending the cleaner expression.
+If the asked contract is inferior but a nearby expression is materially better, interactive mode may still return `NO TRADE` for the asked market while recommending the cleaner expression.
 
 ## Output Format
+
+Output is mode-specific:
+
+- Interactive Analysis Mode: use the eight-section markdown template below with a `TRADE` / `NO TRADE` verdict.
+- Runtime Judgment Mode: return one JSON object only, with required fields, enum values, and mapping rules from `references/runtime-judgment-contract.md`; do not output markdown headings or prose summary text. If activation inputs are incomplete under `contract_version: "runtime.v1"`, return degraded runtime JSON fallback.
+
+### Interactive Analysis Mode
 
 ALWAYS use this exact structure:
 
@@ -350,10 +402,41 @@ Before writing any substantive content, first emit the exact eight section heade
 
 If the input is thematic and multiple candidate markets are discovered:
 
-- start with a short ranked shortlist
+- place a short ranked shortlist at the top of section 2 (`Market Summary`) before the primary market detail bullets
 - include the preferred expression for each surviving thesis
 - include a direct market link for each preferred expression in the shortlist
 - then provide full detailed reports only for markets that survive screening
+
+### Runtime Judgment Mode
+
+Return exactly one JSON object that conforms to `references/runtime-judgment-contract.md`.
+The field lists below are a quick reference only; `references/runtime-judgment-contract.md` is the source of truth and supersedes this summary.
+
+Required top-level fields:
+
+- `alert_kind`
+- `cluster_action`
+- `ttl_hours`
+- `citations`
+- `triggers`
+- `archive_payload`
+
+Recommended top-level fields:
+
+- `thesis`
+- `side`
+- `theoretical_edge_cents`
+- `executable_edge_cents`
+- `max_entry_cents`
+- `suggested_size_usdc`
+- `why_now`
+- `kill_criteria_text`
+- `summary`
+- `watch_item`
+- `evidence_fresh_until`
+- `recheck_required_at`
+
+Use `references/runtime-judgment-contract.md` as the source of truth for enum values, mapping rules, and any schema changes.
 
 ## Archetype-Specific Standards
 
