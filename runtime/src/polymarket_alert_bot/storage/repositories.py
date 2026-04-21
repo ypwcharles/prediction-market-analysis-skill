@@ -23,10 +23,12 @@ class RuntimeRepository:
 
     def insert_alert(self, payload: dict[str, Any]) -> None:
         columns = sorted(payload)
+        assignments = ", ".join(f"{column}=excluded.{column}" for column in columns if column != "id")
         self.conn.execute(
             f"""
             INSERT INTO alerts ({", ".join(columns)})
             VALUES ({", ".join("?" for _ in columns)})
+            ON CONFLICT(id) DO UPDATE SET {assignments}
             """,
             [payload[column] for column in columns],
         )

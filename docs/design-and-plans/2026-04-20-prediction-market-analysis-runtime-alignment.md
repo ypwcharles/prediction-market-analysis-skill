@@ -379,12 +379,21 @@ Create `evals/runtime-v1-scan-payload.json` with:
         "claim_snippet": "Board members preferred waiting for more wage and inflation data before the next move.",
         "tier": "primary",
         "conflict_status": "supportive"
+      },
+      {
+        "source_id": "boj-governor-briefing-2026-04",
+        "source_kind": "official_release",
+        "fetched_at": "2026-04-20T08:15:00Z",
+        "url": "https://www.boj.or.jp/en/announcements/press/kaiken_2026/kk260420a.htm",
+        "claim_snippet": "Governor comments reinforced patience and no near-term policy move.",
+        "tier": "primary",
+        "conflict_status": "supportive"
       }
     ],
     "source_tier_state": {
       "strict_allowed": true,
       "strict_block_reason": "",
-      "primary_support_count": 1,
+      "primary_support_count": 2,
       "supplementary_count": 0,
       "unknown_count": 0,
       "unresolved_primary_conflict": false

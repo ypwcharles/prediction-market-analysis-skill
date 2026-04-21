@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import httpx
 import pytest
+import threading
 from fastapi import FastAPI
 
 from polymarket_alert_bot.runtime_flow import MonitorFlowSummary, ScanFlowSummary
@@ -194,3 +195,28 @@ def test_telegram_webhook_requires_secret_and_routes_payload(tmp_path, monkeypat
     assert accepted.status_code == 200
     assert accepted.json()["callback_handled"] is True
     assert callback_payloads == [{"callback_query": {"id": "cb-1"}}]
+
+
+def test_telegram_webhook_offloads_callback_runner_to_worker_thread(tmp_path, monkeypatch):
+    callback_thread_ids: list[int] = []
+
+    def callback_runner(payload: dict[str, object]):
+        callback_thread_ids.append(threading.get_ident())
+        return {"handled": True, "payload": payload}
+
+    app = _build_app(
+        tmp_path,
+        monkeypatch,
+        callback_runner=callback_runner,
+    )
+    response = _request(
+        app,
+        "POST",
+        "/telegram/webhook",
+        headers={TELEGRAM_SECRET_HEADER: TELEGRAM_WEBHOOK_SECRET},
+        json={"callback_query": {"id": "cb-thread"}},
+    )
+
+    assert response.status_code == 200
+    assert callback_thread_ids
+    assert callback_thread_ids[0] != threading.get_ident()

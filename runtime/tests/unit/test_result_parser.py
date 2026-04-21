@@ -184,7 +184,18 @@ def test_enricher_blocks_strict_when_only_x_sources_present() -> None:
 
     assert enriched.primary_support_count == 0
     assert enriched.strict_allowed is False
-    assert enriched.strict_block_reason == "no_primary_evidence"
+    assert enriched.strict_block_reason == "no_primary_support"
+
+
+def test_enricher_blocks_strict_when_only_one_primary_source_is_present() -> None:
+    source_registry = load_source_registry("runtime/config/sources.toml")
+    news_items = NewsClient().normalize_items(_load_fixture("news_samples.json")[:1])
+
+    enriched = enrich_evidence(news_items, source_registry)
+
+    assert enriched.primary_support_count == 1
+    assert enriched.strict_allowed is False
+    assert enriched.strict_block_reason == "no_primary_support"
 
 
 def test_enricher_blocks_strict_when_primary_conflict_unresolved() -> None:
@@ -230,4 +241,4 @@ def test_enricher_does_not_treat_unlisted_news_domain_as_primary() -> None:
     assert enriched.primary_support_count == 0
     assert enriched.unknown_count == 1
     assert enriched.strict_allowed is False
-    assert enriched.strict_block_reason == "no_primary_evidence"
+    assert enriched.strict_block_reason == "no_primary_support"

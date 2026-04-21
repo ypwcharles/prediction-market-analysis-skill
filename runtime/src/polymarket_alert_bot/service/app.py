@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
@@ -111,7 +112,7 @@ def create_app(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="callback payload must be a JSON object",
             )
-        result = request.app.state.callback_runner(payload)
+        result = await asyncio.to_thread(request.app.state.callback_runner, payload)
         return _serialize_result(result)
 
     return app

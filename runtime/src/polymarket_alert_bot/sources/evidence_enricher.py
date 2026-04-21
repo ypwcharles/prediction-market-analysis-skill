@@ -10,6 +10,7 @@ from polymarket_alert_bot.models.records import SourceRegistry
 PRIMARY_TIERS = {"official", "platform", "news"}
 SUPPLEMENTARY_TIERS = {"x"}
 UNRESOLVED_CONFLICT_STATUSES = {"active", "conflicted", "unresolved"}
+MIN_PRIMARY_SUPPORT_FOR_STRICT = 2
 
 
 @dataclass(slots=True)
@@ -96,9 +97,9 @@ def enrich_evidence(
 
     strict_block_reason: str | None = None
     strict_allowed = True
-    if primary_support_count == 0:
+    if primary_support_count < MIN_PRIMARY_SUPPORT_FOR_STRICT:
         strict_allowed = False
-        strict_block_reason = "no_primary_evidence"
+        strict_block_reason = "no_primary_support"
     elif unresolved_primary_conflict:
         strict_allowed = False
         strict_block_reason = "unresolved_primary_conflict"

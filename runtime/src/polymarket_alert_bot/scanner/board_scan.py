@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import os
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from polymarket_alert_bot.config.settings import RuntimeConfig, RuntimePaths, load_runtime_config
 from polymarket_alert_bot.models.enums import RunStatus, RunType
@@ -295,9 +295,10 @@ def _build_alert_seeds(
         judgment_seed = _resolve_judgment_seed(candidate, judgment_seed_inputs)
         evidence_seeds = _resolve_evidence_seeds(candidate, evidence_seed_inputs)
         alert_kind = "scanner_seed_degraded" if candidate.is_degraded else "scanner_seed"
+        dedupe_key = f"scanner-seed::{candidate.expression_key}"
         seeds.append(
             AlertSeed(
-                id=str(uuid4()),
+                id=str(uuid5(NAMESPACE_URL, f"alert::{dedupe_key}")),
                 run_id=run_id,
                 event_id=candidate.event_id,
                 market_id=candidate.market_id,
@@ -310,7 +311,7 @@ def _build_alert_seeds(
                     market_slug=candidate.market_slug,
                 ),
                 alert_kind=alert_kind,
-                dedupe_key=f"scanner-seed::{candidate.expression_key}",
+                dedupe_key=dedupe_key,
                 expression_key=candidate.expression_key,
                 expression_summary=candidate.expression_summary,
                 rules_text=candidate.rules_text,

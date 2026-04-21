@@ -299,6 +299,97 @@ def test_scan_command_degrades_when_configured_evidence_feed_fails(tmp_path, mon
     assert any(row["alert_kind"] == "research" for row in alert_rows)
 
 
+def test_scan_command_dedupes_repeated_runs_into_the_same_alert_rows(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID", "-100123456")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH",
+        str(FIXTURES / "news_samples.json"),
+    )
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_X_SAMPLES_PATH",
+        str(FIXTURES / "x_samples.json"),
+    )
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys;"
+                    "payload=json.load(sys.stdin);"
+                    "rules_text=payload['context'].get('rules_text','');"
+                    "response={"
+                    "'alert_kind':'strict',"
+                    "'cluster_action':'create',"
+                    "'ttl_hours':6,"
+                    "'thesis':'Rumor premium should mean-revert',"
+                    "'side':'NO',"
+                    "'theoretical_edge_cents':14.2,"
+                    "'executable_edge_cents':10.5,"
+                    "'max_entry_cents':43.0,"
+                    "'suggested_size_usdc':250.0,"
+                    "'why_now':rules_text or 'No primary confirmation despite price spike.',"
+                    "'kill_criteria_text':'Primary confirmation or rule change.',"
+                    "'summary':'research summary',"
+                    "'watch_item':'Need updated official statement',"
+                    "'citations':[{'claim':'Reuters reports no confirmation yet.','source':{'id':'reuters','name':'Reuters','url':'https://www.reuters.com/test','tier':'primary','fetched_at':'2026-04-17T12:00:00Z'}}],"
+                    "'triggers':[{'trigger_type':'price_reprice','threshold_kind':'price','comparison':'<=','threshold_value':'43','suggested_action':'Add on repricing','condition':'YES <= 43'}],"
+                    "'archive_payload':{'summary':'archive summary'}};"
+                    "json.dump(response,sys.stdout)"
+                ),
+            ]
+        ),
+    )
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_book(token_id: str) -> BookSnapshot:
+        if token_id == "token-live-tradable":
+            return BookSnapshot(
+                token_id=token_id,
+                best_bid=0.49,
+                best_ask=0.51,
+                spread_bps=400.0,
+                slippage_bps=200.0,
+                is_degraded=False,
+                degraded_reason=None,
+            )
+        return degraded_snapshot(token_id, "book_missing")
+
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload)
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+
+    assert main(["scan"]) == 0
+    assert main(["scan"]) == 0
+
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    alert_rows = conn.execute(
+        """
+        SELECT id, alert_kind, market_id, dedupe_key
+        FROM alerts
+        ORDER BY market_id
+        """
+    ).fetchall()
+    assert len(alert_rows) == 2
+    assert [(row["alert_kind"], row["market_id"]) for row in alert_rows] == [
+        ("strict_degraded", "mkt-live-degraded"),
+        ("strict", "mkt-live-tradable"),
+    ]
+    assert all(row["dedupe_key"].startswith("scanner-seed::") for row in alert_rows)
+
+    claim_mapping_count = conn.execute("SELECT COUNT(*) FROM claim_source_mappings").fetchone()[0]
+    trigger_count = conn.execute("SELECT COUNT(*) FROM triggers").fetchone()[0]
+    run_count = conn.execute("SELECT COUNT(*) FROM runs WHERE run_type = 'scan'").fetchone()[0]
+    assert claim_mapping_count == 2
+    assert trigger_count == 2
+    assert run_count == 2
+
+
 def _seed_monitor_source_alert(paths) -> None:
     conn = connect_db(paths.db_path)
     apply_migrations(conn)

@@ -177,6 +177,13 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     )
     _ensure_column(conn, "cluster_expressions", "condition_id", "TEXT")
     _ensure_column(conn, "alerts", "condition_id", "TEXT")
+    _dedupe_alert_rows(conn)
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS alerts_dedupe_key_unique
+        ON alerts(dedupe_key)
+        """
+    )
     conn.commit()
 
 
@@ -188,3 +195,54 @@ def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, 
     if column_name in columns:
         return
     conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+
+
+def _dedupe_alert_rows(conn: sqlite3.Connection) -> None:
+    duplicate_keys = conn.execute(
+        """
+        SELECT dedupe_key
+        FROM alerts
+        GROUP BY dedupe_key
+        HAVING COUNT(*) > 1
+        """
+    ).fetchall()
+    for row in duplicate_keys:
+        dedupe_key = row[0]
+        alert_rows = conn.execute(
+            """
+            SELECT id
+            FROM alerts
+            WHERE dedupe_key = ?
+            ORDER BY created_at DESC, rowid DESC
+            """,
+            [dedupe_key],
+        ).fetchall()
+        keep_id = alert_rows[0][0]
+        duplicate_ids = [alert_row[0] for alert_row in alert_rows[1:]]
+        if not duplicate_ids:
+            continue
+        placeholders = ", ".join("?" for _ in duplicate_ids)
+        for table_name in ("claim_source_mappings", "triggers", "feedback"):
+            conn.execute(
+                f"""
+                UPDATE {table_name}
+                SET alert_id = ?
+                WHERE alert_id IN ({placeholders})
+                """,
+                [keep_id, *duplicate_ids],
+            )
+        conn.execute(
+            f"""
+            UPDATE thesis_clusters
+            SET last_alert_id = ?
+            WHERE last_alert_id IN ({placeholders})
+            """,
+            [keep_id, *duplicate_ids],
+        )
+        conn.execute(
+            f"""
+            DELETE FROM alerts
+            WHERE id IN ({placeholders})
+            """,
+            duplicate_ids,
+        )

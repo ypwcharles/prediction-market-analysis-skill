@@ -44,3 +44,16 @@ def test_schema_includes_runtime_reconciliation_columns(tmp_path):
     assert {"condition_id", "market_id", "token_id"} <= alert_columns
     assert {"condition_id", "market_id", "token_id"} <= expression_columns
     assert {"payload_json", "telegram_chat_id", "telegram_message_id"} <= feedback_columns
+
+
+def test_schema_enforces_unique_alert_dedupe_keys(tmp_path):
+    db_path = tmp_path / "runtime.sqlite3"
+    conn = connect_db(db_path)
+    apply_migrations(conn)
+
+    indexes = {
+        row["name"]: row["unique"]
+        for row in conn.execute("PRAGMA index_list(alerts)").fetchall()
+    }
+
+    assert indexes["alerts_dedupe_key_unique"] == 1

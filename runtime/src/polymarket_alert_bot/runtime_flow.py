@@ -87,6 +87,7 @@ def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | No
 
     for seed in scan_result.alert_seeds:
         seed_now = _now_iso()
+        existing_alert = repository.get_alert(seed.id)
         parsed = _judge_seed(
             skill=skill,
             conn=conn,
@@ -112,6 +113,7 @@ def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | No
             now_iso=seed_now,
         )
         _persist_claim_mappings(
+            conn,
             repository,
             registry,
             alert_id=seed.id,
@@ -144,6 +146,7 @@ def execute_scan_flow(paths: RuntimePaths, *, runtime_config: RuntimeConfig | No
                 text=rendered,
                 alert_id=seed.id,
                 thesis_cluster_id=cluster_id,
+                message_ref=_message_ref_from_alert(existing_alert),
             )
             strict_alert_ids.append(seed.id)
         else:
@@ -549,11 +552,13 @@ def _finalize_alert_kind(
     evidence_degraded: bool = False,
 ) -> str:
     desired = parsed.alert_kind
-    if desired in {"strict", "strict_degraded", "reprice"}:
+    if desired in {"strict", "strict_degraded"}:
         if not strict_allowed:
             return "research"
         if seed.is_degraded or evidence_degraded:
             return "strict_degraded"
+    if desired == "reprice":
+        return "reprice"
     return desired
 
 
@@ -676,6 +681,7 @@ def _sync_source_registry(repository: RuntimeRepository, registry, *, now_iso: s
 
 
 def _persist_claim_mappings(
+    conn,
     repository: RuntimeRepository,
     registry,
     *,
@@ -684,6 +690,8 @@ def _persist_claim_mappings(
     citations,
     now_iso: str,
 ) -> None:
+    conn.execute("DELETE FROM claim_source_mappings WHERE alert_id = ?", [alert_id])
+    conn.commit()
     for citation in citations:
         source_id = citation.source_id
         source_name = citation.source_name or (citation.source.name if citation.source else None) or citation.source_id
@@ -811,16 +819,32 @@ def _deliver_message(
     text: str,
     alert_id: str,
     thesis_cluster_id: str,
+    message_ref: TelegramMessageRef | None = None,
 ) -> TelegramMessageRef | None:
     if not config.telegram_chat_id:
-        return None
+        return message_ref
     keyboard = (
         build_feedback_keyboard(alert_id=alert_id, thesis_cluster_id=thesis_cluster_id)
         if thesis_cluster_id not in {"research", "heartbeat"}
         else None
     )
     with TelegramClient() as telegram:
-        return telegram.send_message(chat_id=config.telegram_chat_id, text=text, inline_keyboard=keyboard)
+        return telegram.upsert_message(
+            chat_id=config.telegram_chat_id,
+            text=text,
+            message_ref=message_ref,
+            inline_keyboard=keyboard,
+        )
+
+
+def _message_ref_from_alert(alert_row) -> TelegramMessageRef | None:
+    if alert_row is None:
+        return None
+    chat_id = alert_row["telegram_chat_id"]
+    message_id = alert_row["telegram_message_id"]
+    if not chat_id or not message_id:
+        return None
+    return TelegramMessageRef(chat_id=str(chat_id), message_id=str(message_id))
 
 
 def _source_id(domain_or_handle: str) -> str:
