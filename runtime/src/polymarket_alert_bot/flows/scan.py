@@ -33,6 +33,7 @@ from polymarket_alert_bot.judgment.result_parser import ParsedJudgment
 from polymarket_alert_bot.judgment.skill_adapter import SkillAdapter
 from polymarket_alert_bot.scanner.board_scan import AlertSeed, run_scan
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem, enrich_evidence
+from polymarket_alert_bot.sources.semantic_relevance import SemanticRelevanceAdapter
 from polymarket_alert_bot.sources.shortlist_retrieval import (
     filter_seed_evidence_items,
     retrieve_shortlist_evidence,
@@ -76,12 +77,19 @@ def execute_scan_flow(
         timeout_seconds=config.judgment_timeout_seconds,
         external_command=list(config.judgment_command) or None,
     )
+    semantic_adapter = SemanticRelevanceAdapter(
+        enabled=config.semantic_relevance_enabled,
+        timeout_seconds=config.semantic_relevance_timeout_seconds,
+        max_items=config.semantic_relevance_max_items,
+        external_command=list(config.semantic_relevance_command) or None,
+    )
     strict_alert_ids: list[str] = []
     research_alert_ids: list[str] = []
     research_renderings: list[str] = []
     heartbeat_alert_id: str | None = None
     retrieved_shortlist_candidates = 0
     retrieval_degraded = False
+    semantic_relevance_degraded = False
 
     for seed in scan_result.alert_seeds:
         seed_now = _now_iso()
@@ -94,24 +102,34 @@ def execute_scan_flow(
             seed_configured_evidence = filter_seed_evidence_items(seed, configured_evidence)
         if retrieval_result.degraded_reasons:
             retrieval_degraded = True
-        seed_evidence_degraded = evidence_degraded or bool(retrieval_result.degraded_reasons)
+        merged_evidence = _merge_evidence(
+            seed,
+            seed_configured_evidence,
+            retrieved_items=retrieval_result.items,
+        )
+        semantic_result = semantic_adapter.filter_evidence(
+            seed=seed,
+            evidence_items=merged_evidence,
+        )
+        if semantic_result.degraded_reason:
+            degraded_reasons.append(semantic_result.degraded_reason)
+            semantic_relevance_degraded = True
+        seed_evidence_degraded = (
+            evidence_degraded
+            or bool(retrieval_result.degraded_reasons)
+            or semantic_result.degraded_reason is not None
+        )
         parsed = _judge_seed(
             skill=skill,
             conn=conn,
             seed=seed,
-            configured_evidence=seed_configured_evidence,
-            retrieved_evidence=retrieval_result.items,
+            evidence_items=semantic_result.items,
             registry=registry,
         )
         final_kind = _finalize_alert_kind(
             parsed,
             seed,
-            strict_allowed=_is_strict_allowed(
-                seed,
-                seed_configured_evidence,
-                registry,
-                retrieved_evidence=retrieval_result.items,
-            ),
+            strict_allowed=_is_strict_allowed(semantic_result.items, registry),
             evidence_degraded=seed_evidence_degraded,
         )
         cluster_id = _stable_cluster_id(seed, parsed)
@@ -194,7 +212,7 @@ def execute_scan_flow(
         )
 
     combined_degraded_reason = _combine_degraded_reason(*degraded_reasons)
-    run_evidence_degraded = evidence_degraded or retrieval_degraded
+    run_evidence_degraded = evidence_degraded or retrieval_degraded or semantic_relevance_degraded
 
     if research_renderings:
         _deliver_message(
@@ -302,11 +320,9 @@ def _judge_seed(
     skill: SkillAdapter,
     conn,
     seed: AlertSeed,
-    configured_evidence: Iterable[EvidenceItem],
-    retrieved_evidence: Iterable[EvidenceItem],
+    evidence_items: Iterable[EvidenceItem],
     registry,
 ) -> ParsedJudgment:
-    evidence_items = _merge_evidence(seed, configured_evidence, retrieved_items=retrieved_evidence)
     enriched = enrich_evidence(evidence_items, registry)
     context = build_judgment_context(
         candidate_facts=_seed_candidate_facts(seed),
@@ -322,11 +338,7 @@ def _judge_seed(
 
 
 def _is_strict_allowed(
-    seed: AlertSeed,
-    configured_evidence: Iterable[EvidenceItem],
+    evidence_items: Iterable[EvidenceItem],
     registry,
-    *,
-    retrieved_evidence: Iterable[EvidenceItem],
 ) -> bool:
-    evidence_items = _merge_evidence(seed, configured_evidence, retrieved_items=retrieved_evidence)
     return enrich_evidence(evidence_items, registry).strict_allowed

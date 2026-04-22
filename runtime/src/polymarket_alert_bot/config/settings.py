@@ -32,6 +32,10 @@ class RuntimeConfig:
     telegram_message_thread_id: str | None
     judgment_command: tuple[str, ...]
     judgment_timeout_seconds: int
+    semantic_relevance_enabled: bool
+    semantic_relevance_command: tuple[str, ...]
+    semantic_relevance_timeout_seconds: int
+    semantic_relevance_max_items: int
     news_feed_url: str | None
     x_feed_url: str | None
     news_samples_path: Path | None
@@ -86,6 +90,14 @@ def load_runtime_config() -> RuntimeConfig:
     judgment_command = (
         tuple(_split_command_text(judgment_command_text)) if judgment_command_text else ()
     )
+    semantic_relevance_command_text = _optional_env(
+        "POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_COMMAND"
+    ) or _optional_env("POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_RUNNER_CMD")
+    semantic_relevance_command = (
+        tuple(_split_command_text(semantic_relevance_command_text))
+        if semantic_relevance_command_text
+        else ()
+    )
 
     return RuntimeConfig(
         gamma_events_url=os.environ.get(
@@ -107,6 +119,17 @@ def load_runtime_config() -> RuntimeConfig:
         judgment_command=judgment_command,
         judgment_timeout_seconds=int(
             os.environ.get("POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS", "600")
+        ),
+        semantic_relevance_enabled=_env_flag(
+            "POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_ENABLED",
+            default=False,
+        ),
+        semantic_relevance_command=semantic_relevance_command,
+        semantic_relevance_timeout_seconds=int(
+            os.environ.get("POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_TIMEOUT_SECONDS", "60")
+        ),
+        semantic_relevance_max_items=int(
+            os.environ.get("POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_MAX_ITEMS", "12")
         ),
         news_feed_url=_optional_env("POLYMARKET_ALERT_BOT_NEWS_FEED_URL"),
         x_feed_url=_optional_env("POLYMARKET_ALERT_BOT_X_FEED_URL"),
