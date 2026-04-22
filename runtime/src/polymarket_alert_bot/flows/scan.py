@@ -94,12 +94,11 @@ def execute_scan_flow(
     for seed in scan_result.alert_seeds:
         seed_now = _now_iso()
         existing_alert = repository.get_alert(seed.id)
-        seed_configured_evidence = configured_evidence
+        seed_configured_evidence = filter_seed_evidence_items(seed, configured_evidence)
         retrieval_result = retrieve_shortlist_evidence(seed, config, registry=registry)
         degraded_reasons.extend(retrieval_result.degraded_reasons)
         if retrieval_result.items:
             retrieved_shortlist_candidates += 1
-            seed_configured_evidence = filter_seed_evidence_items(seed, configured_evidence)
         if retrieval_result.degraded_reasons:
             retrieval_degraded = True
         merged_evidence = _merge_evidence(
