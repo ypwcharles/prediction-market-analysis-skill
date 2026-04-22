@@ -32,10 +32,13 @@ MAX_SPREAD_BPS = 800.0
 @dataclass(frozen=True)
 class ScanCoverage:
     total_events: int
+    total_families: int
     total_markets: int
     total_candidates: int
     shortlisted_candidates: int
     tradable_candidates: int
+    families_with_structural_flags: int
+    structurally_flagged_candidates: int
     missing_deadline_candidates: int
     missing_category_candidates: int
     missing_outcome_candidates: int
@@ -155,10 +158,13 @@ def run_scan(
             "finished_at": timestamp,
             "degraded_reason": degraded_reason,
             "scanned_events": outcome.coverage.total_events,
+            "scanned_families": outcome.coverage.total_families,
             "scanned_contracts": outcome.coverage.total_candidates,
             "shortlisted_candidates": outcome.coverage.shortlisted_candidates,
             "retrieved_shortlist_candidates": 0,
             "promoted_seed_count": len(alert_seeds),
+            "families_with_structural_flags": outcome.coverage.families_with_structural_flags,
+            "structurally_flagged_candidates": outcome.coverage.structurally_flagged_candidates,
             "missing_deadline_candidates": outcome.coverage.missing_deadline_candidates,
             "missing_category_candidates": outcome.coverage.missing_category_candidates,
             "missing_outcome_candidates": outcome.coverage.missing_outcome_candidates,
@@ -287,6 +293,16 @@ def _prefilter(
     total_markets = sum(
         len(event.get("markets", [])) for event in events if isinstance(event.get("markets"), list)
     )
+    families_with_structural_flags = len(
+        {
+            candidate.event_id
+            for candidate in candidates
+            if candidate.family_summary.structural_flag_count > 0
+        }
+    )
+    structurally_flagged_candidates = sum(
+        1 for candidate in candidates if candidate.family_summary.structural_flag_count > 0
+    )
     missing_deadline_candidates = sum(1 for candidate in candidates if not candidate.event_end_time)
     missing_category_candidates = sum(1 for candidate in candidates if not candidate.event_category)
     missing_outcome_candidates = sum(1 for candidate in candidates if not candidate.outcome_name)
@@ -295,10 +311,13 @@ def _prefilter(
     )
     coverage = ScanCoverage(
         total_events=len(events),
+        total_families=len(events),
         total_markets=total_markets,
         total_candidates=len(candidates),
         shortlisted_candidates=len(tradable) + len(degraded),
         tradable_candidates=len(tradable),
+        families_with_structural_flags=families_with_structural_flags,
+        structurally_flagged_candidates=structurally_flagged_candidates,
         missing_deadline_candidates=missing_deadline_candidates,
         missing_category_candidates=missing_category_candidates,
         missing_outcome_candidates=missing_outcome_candidates,
@@ -322,10 +341,13 @@ def _dry_outcome() -> ScanOutcome:
     return ScanOutcome(
         coverage=ScanCoverage(
             total_events=0,
+            total_families=0,
             total_markets=0,
             total_candidates=0,
             shortlisted_candidates=0,
             tradable_candidates=0,
+            families_with_structural_flags=0,
+            structurally_flagged_candidates=0,
             missing_deadline_candidates=0,
             missing_category_candidates=0,
             missing_outcome_candidates=0,

@@ -22,10 +22,13 @@ def test_scan_pipeline_prefilters_and_coverage_accounting():
     outcome = scan_board(gamma_payload, clob_payload)
 
     assert outcome.coverage.total_events == 2
+    assert outcome.coverage.total_families == 2
     assert outcome.coverage.total_markets == 4
     assert outcome.coverage.total_candidates == 4
     assert outcome.coverage.shortlisted_candidates == 2
     assert outcome.coverage.tradable_candidates == 1
+    assert outcome.coverage.families_with_structural_flags == 0
+    assert outcome.coverage.structurally_flagged_candidates == 0
     assert outcome.coverage.missing_deadline_candidates == 4
     assert outcome.coverage.missing_category_candidates == 4
     assert outcome.coverage.missing_outcome_candidates == 4
@@ -94,8 +97,11 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     )
 
     assert result.outcome.coverage.total_events == 1
+    assert result.outcome.coverage.total_families == 1
     assert result.outcome.coverage.total_markets == 2
     assert result.outcome.coverage.total_candidates == 2
+    assert result.outcome.coverage.families_with_structural_flags == 0
+    assert result.outcome.coverage.structurally_flagged_candidates == 0
     assert [seed.market_id for seed in result.alert_seeds] == [
         "mkt-live-tradable",
         "mkt-live-degraded",
@@ -148,10 +154,13 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
         """
         SELECT
             scanned_events,
+            scanned_families,
             scanned_contracts,
             shortlisted_candidates,
             retrieved_shortlist_candidates,
             promoted_seed_count,
+            families_with_structural_flags,
+            structurally_flagged_candidates,
             missing_deadline_candidates,
             missing_category_candidates,
             missing_outcome_candidates,
@@ -164,10 +173,13 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     ).fetchone()
     assert dict(run_row) == {
         "scanned_events": result.outcome.coverage.total_events,
+        "scanned_families": result.outcome.coverage.total_families,
         "scanned_contracts": result.outcome.coverage.total_candidates,
         "shortlisted_candidates": 2,
         "retrieved_shortlist_candidates": 0,
         "promoted_seed_count": 2,
+        "families_with_structural_flags": 0,
+        "structurally_flagged_candidates": 0,
         "missing_deadline_candidates": 0,
         "missing_category_candidates": 0,
         "missing_outcome_candidates": 0,
@@ -336,6 +348,103 @@ def test_run_scan_caps_judgment_candidates_by_priority(monkeypatch, tmp_path):
     }
 
     assert result.alert_seeds[0].market_id == "market-high"
+
+
+def test_run_scan_prefers_structural_candidate_over_more_liquid_hot_board(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+
+    gamma_payload = [
+        {
+            "id": "event-fed",
+            "slug": "fed-cuts-2026",
+            "title": "Fed Rate Cuts 2026",
+            "category": "Politics",
+            "endDate": "2026-12-31T00:00:00Z",
+            "markets": [
+                {
+                    "id": "market-fed-may",
+                    "slug": "fed-cut-by-may",
+                    "question": "Will the Fed cut rates by May?",
+                    "outcome": "YES",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-fed-may",
+                    "liquidity": 12000,
+                    "lastTradePrice": 0.63,
+                    "token_id": "token-fed-may",
+                },
+                {
+                    "id": "market-fed-june",
+                    "slug": "fed-cut-by-june",
+                    "question": "Will the Fed cut rates by June?",
+                    "outcome": "YES",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-fed-june",
+                    "liquidity": 8500,
+                    "lastTradePrice": 0.61,
+                    "token_id": "token-fed-june",
+                },
+            ],
+        },
+        {
+            "id": "event-bitcoin",
+            "slug": "bitcoin-2026",
+            "title": "Bitcoin 2026",
+            "category": "Crypto",
+            "endDate": "2026-12-31T00:00:00Z",
+            "markets": [
+                {
+                    "id": "market-hot-board",
+                    "slug": "bitcoin-150k",
+                    "question": "Will bitcoin hit $150k in 2026?",
+                    "outcome": "YES",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-btc-150k",
+                    "liquidity": 30000,
+                    "lastTradePrice": 0.52,
+                    "token_id": "token-btc-150k",
+                }
+            ],
+        },
+    ]
+    clob_payload = {
+        "books": [
+            {
+                "token_id": "token-fed-may",
+                "bids": [{"price": "0.62"}],
+                "asks": [{"price": "0.64"}],
+            },
+            {
+                "token_id": "token-fed-june",
+                "bids": [{"price": "0.60"}],
+                "asks": [{"price": "0.62"}],
+            },
+            {
+                "token_id": "token-btc-150k",
+                "bids": [{"price": "0.51"}],
+                "asks": [{"price": "0.53"}],
+            },
+        ]
+    }
+
+    result = run_scan(
+        paths,
+        gamma_payload=gamma_payload,
+        clob_payload=clob_payload,
+        max_judgment_candidates=1,
+    )
+
+    assert result.outcome.coverage.total_families == 2
+    assert result.outcome.coverage.families_with_structural_flags == 1
+    assert result.outcome.coverage.structurally_flagged_candidates == 2
+    assert len(result.alert_seeds) == 1
+    assert result.alert_seeds[0].market_id == "market-fed-june"
+    assert result.alert_seeds[0].family_summary.structural_flag_count == 2
+    assert result.alert_seeds[0].ranking_summary["family_structural_signal_score"] == 5
 
 
 def test_run_scan_persists_rejection_explanations_for_miss_review(monkeypatch, tmp_path):

@@ -16,6 +16,15 @@ class CandidateRankingSummary:
     deadline_available: bool
     deadline_rank: int
     family_sibling_count: int
+    family_surface_group_count: int
+    family_price_surface_depth: int
+    family_structural_flag_count: int
+    family_structural_signal_score: int
+    family_dominance_count: int
+    family_dominated_by_count: int
+    family_partition_anomaly_count: int
+    family_negative_implied_hazard_count: int
+    family_rule_scope_adjacency_count: int
     liquidity_usd: float
     spread_bps: float | None
     is_degraded: bool
@@ -24,12 +33,17 @@ class CandidateRankingSummary:
     missing_outcome_name: bool
     missing_family_context: bool
 
-    def priority_key(self, *, market_id: str) -> tuple[int, int, int, int, float, float, str]:
+    def priority_key(
+        self, *, market_id: str
+    ) -> tuple[int, int, int, int, int, int, int, float, float, str]:
         spread_penalty = self.spread_bps if self.spread_bps is not None else 1_000_000.0
         return (
             1 if self.is_degraded else 0,
             0 if self.supported_runtime_domain else 1,
+            -self.family_structural_signal_score,
+            -self.family_structural_flag_count,
             self.deadline_rank,
+            -self.family_price_surface_depth,
             -self.family_sibling_count,
             -self.liquidity_usd,
             spread_penalty,
@@ -42,6 +56,15 @@ class CandidateRankingSummary:
             "deadline_available": self.deadline_available,
             "deadline_rank": self.deadline_rank,
             "family_sibling_count": self.family_sibling_count,
+            "family_surface_group_count": self.family_surface_group_count,
+            "family_price_surface_depth": self.family_price_surface_depth,
+            "family_structural_flag_count": self.family_structural_flag_count,
+            "family_structural_signal_score": self.family_structural_signal_score,
+            "family_dominance_count": self.family_dominance_count,
+            "family_dominated_by_count": self.family_dominated_by_count,
+            "family_partition_anomaly_count": self.family_partition_anomaly_count,
+            "family_negative_implied_hazard_count": self.family_negative_implied_hazard_count,
+            "family_rule_scope_adjacency_count": self.family_rule_scope_adjacency_count,
             "liquidity_usd": self.liquidity_usd,
             "spread_bps": self.spread_bps,
             "is_degraded": self.is_degraded,
@@ -54,7 +77,7 @@ class CandidateRankingSummary:
 
 def candidate_priority_key(
     candidate: ScanCandidate,
-) -> tuple[int, int, int, int, float, float, str]:
+) -> tuple[int, int, int, int, int, int, int, float, float, str]:
     return build_ranking_summary(candidate).priority_key(market_id=candidate.market_id)
 
 
@@ -76,6 +99,15 @@ def build_ranking_summary(candidate: ScanCandidate) -> CandidateRankingSummary:
         deadline_available=deadline_rank != UNKNOWN_DEADLINE_RANK,
         deadline_rank=deadline_rank,
         family_sibling_count=candidate.family_summary.sibling_count,
+        family_surface_group_count=candidate.family_summary.surface_group_count,
+        family_price_surface_depth=candidate.family_summary.price_surface_depth,
+        family_structural_flag_count=candidate.family_summary.structural_flag_count,
+        family_structural_signal_score=candidate.family_summary.structural_signal_score,
+        family_dominance_count=candidate.family_summary.dominance_count,
+        family_dominated_by_count=candidate.family_summary.dominated_by_count,
+        family_partition_anomaly_count=candidate.family_summary.partition_anomaly_count,
+        family_negative_implied_hazard_count=candidate.family_summary.negative_implied_hazard_count,
+        family_rule_scope_adjacency_count=candidate.family_summary.rule_scope_adjacency_count,
         liquidity_usd=candidate.liquidity_usd or 0.0,
         spread_bps=candidate.spread_bps,
         is_degraded=candidate.is_degraded,

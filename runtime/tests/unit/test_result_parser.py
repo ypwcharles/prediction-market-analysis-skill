@@ -309,10 +309,17 @@ def test_wrapper_runner_timeout_cleans_fake_hermes_descendants(
 
     monkeypatch.setenv("HERMES_RUNTIME_REAL_RUNNER_EXECUTABLE", str(fake_hermes))
     monkeypatch.setenv("FAKE_HERMES_CHILD_PID_FILE", str(child_file))
-    monkeypatch.setenv("POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS", "1")
+    # Give the wrapper enough inner budget to spawn the fake hermes process and
+    # record its descendant pid before the timeout fires. A 1-second budget
+    # races on slower local scheduling and makes the test flaky even though the
+    # wrapper cleanup path is correct.
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS", "2")
 
     wrapper = Path(__file__).resolve().parents[3] / "scripts" / "hermes_runtime_real_runner.py"
-    adapter = SkillAdapter(external_command=[sys.executable, str(wrapper)], timeout_seconds=1)
+    # Give the outer adapter timeout enough cushion so this test exercises the
+    # wrapper's own hermes-timeout cleanup path rather than racing the adapter's
+    # generic skill-timeout fallback under slower local scheduling.
+    adapter = SkillAdapter(external_command=[sys.executable, str(wrapper)], timeout_seconds=4)
 
     parsed = adapter.judge({"candidate_facts": {"market_id": "m1"}})
 

@@ -51,27 +51,23 @@ def _merge_evidence(
 ) -> list[EvidenceItem]:
     merged: list[EvidenceItem] = []
     seen: set[tuple[str, str, str]] = set()
-    base_items = tuple(retrieved_items)
-    if not base_items:
-        base_items = tuple(configured_items)
-    for item in base_items:
-        key = (item.source_id, item.url, item.claim_snippet)
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(item)
+    seeded_items: list[EvidenceItem] = []
     for raw in seed.evidence_seeds:
         if "source_kind" not in raw:
             continue
-        item = EvidenceItem(
-            source_id=str(raw.get("source_id") or raw.get("source") or "seed"),
-            source_kind=str(raw.get("source_kind") or raw.get("source") or "unknown"),
-            fetched_at=str(raw.get("fetched_at") or _now_iso()),
-            url=str(raw.get("url") or "about:blank"),
-            claim_snippet=str(raw.get("claim_snippet") or raw.get("claim") or "seed evidence"),
-            tier=str(raw.get("tier") or ""),
-            conflict_status=str(raw["conflict_status"]) if raw.get("conflict_status") else None,
+        seeded_items.append(
+            EvidenceItem(
+                source_id=str(raw.get("source_id") or raw.get("source") or "seed"),
+                source_kind=str(raw.get("source_kind") or raw.get("source") or "unknown"),
+                fetched_at=str(raw.get("fetched_at") or _now_iso()),
+                url=str(raw.get("url") or "about:blank"),
+                claim_snippet=str(raw.get("claim_snippet") or raw.get("claim") or "seed evidence"),
+                tier=str(raw.get("tier") or ""),
+                conflict_status=str(raw["conflict_status"]) if raw.get("conflict_status") else None,
+            )
         )
+    base_items = (*seeded_items, *configured_items, *retrieved_items)
+    for item in base_items:
         key = (item.source_id, item.url, item.claim_snippet)
         if key in seen:
             continue

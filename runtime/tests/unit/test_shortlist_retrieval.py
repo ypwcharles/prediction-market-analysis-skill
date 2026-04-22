@@ -6,9 +6,11 @@ from polymarket_alert_bot.config.settings import load_runtime_config
 from polymarket_alert_bot.models.records import SourceRegistry
 from polymarket_alert_bot.scanner.board_scan import AlertSeed
 from polymarket_alert_bot.scanner.family import CandidateFamilySummary, FamilyMarketSummary
+from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
 from polymarket_alert_bot.sources.shortlist_retrieval import (
     _build_query_terms,
     _filter_rows,
+    filter_seed_evidence_items,
     retrieve_shortlist_evidence,
 )
 
@@ -112,6 +114,142 @@ def test_filter_rows_prefers_newer_evidence_when_scores_tie():
     )
 
     assert [row["source_id"] for row in filtered] == ["new", "old"]
+
+
+def test_filter_seed_evidence_items_keeps_only_candidate_relevant_configured_items():
+    filtered = filter_seed_evidence_items(
+        _seed(),
+        (
+            EvidenceItem(
+                source_id="news-a-1",
+                source_kind="news",
+                fetched_at="2026-04-22T01:00:00Z",
+                url="https://news.example.test/a-1",
+                claim_snippet="2026 Live Election polling update favors Candidate A.",
+                tier="primary",
+            ),
+            EvidenceItem(
+                source_id="news-unrelated",
+                source_kind="news",
+                fetched_at="2026-04-22T01:05:00Z",
+                url="https://news.example.test/unrelated",
+                claim_snippet="Snowstorm expected next week.",
+                tier="primary",
+            ),
+            EvidenceItem(
+                source_id="x-a-1",
+                source_kind="x",
+                fetched_at="2026-04-22T01:10:00Z",
+                url="https://x.com/polymarket/status/1",
+                claim_snippet="Candidate A market repricing after live election update.",
+                tier="supplementary",
+            ),
+        ),
+    )
+
+    assert [item.source_id for item in filtered] == ["news-a-1", "x-a-1"]
+
+
+def test_filter_seed_evidence_items_preserves_primary_support_before_fresher_x_chatter():
+    filtered = filter_seed_evidence_items(
+        _seed(),
+        (
+            EvidenceItem(
+                source_id="wire-a",
+                source_kind="news",
+                fetched_at="2026-04-22T01:00:00Z",
+                url="https://news.example.test/a",
+                claim_snippet="2026 Live Election update favors Candidate A.",
+                tier="primary",
+            ),
+            EvidenceItem(
+                source_id="wire-b",
+                source_kind="news",
+                fetched_at="2026-04-22T01:01:00Z",
+                url="https://news.example.test/b",
+                claim_snippet="Candidate A remains uncertified in the 2026 Live Election.",
+                tier="primary",
+            ),
+            EvidenceItem(
+                source_id="x-1",
+                source_kind="x",
+                fetched_at="2026-04-22T01:10:00Z",
+                url="https://x.com/example/status/1",
+                claim_snippet="Candidate A live election chatter update.",
+                tier="supplementary",
+            ),
+            EvidenceItem(
+                source_id="x-2",
+                source_kind="x",
+                fetched_at="2026-04-22T01:11:00Z",
+                url="https://x.com/example/status/2",
+                claim_snippet="Candidate A live election chatter update again.",
+                tier="supplementary",
+            ),
+            EvidenceItem(
+                source_id="x-3",
+                source_kind="x",
+                fetched_at="2026-04-22T01:12:00Z",
+                url="https://x.com/example/status/3",
+                claim_snippet="Another Candidate A live election chatter update.",
+                tier="supplementary",
+            ),
+            EvidenceItem(
+                source_id="x-4",
+                source_kind="x",
+                fetched_at="2026-04-22T01:13:00Z",
+                url="https://x.com/example/status/4",
+                claim_snippet="Yet another Candidate A live election chatter update.",
+                tier="supplementary",
+            ),
+        ),
+    )
+
+    assert [item.source_id for item in filtered][:2] == ["wire-b", "wire-a"]
+    assert {item.source_id for item in filtered} >= {"wire-a", "wire-b"}
+
+
+def test_filter_rows_dedupes_before_applying_the_cap():
+    rows = [
+        {
+            "source_id": "dup",
+            "url": "https://news.example.test/dup",
+            "claim_snippet": "2026 Live Election update for Candidate A.",
+            "fetched_at": "2026-04-22T02:04:00Z",
+        },
+        {
+            "source_id": "dup",
+            "url": "https://news.example.test/dup",
+            "claim_snippet": "2026 Live Election update for Candidate A.",
+            "fetched_at": "2026-04-22T02:03:00Z",
+        },
+        {
+            "source_id": "dup",
+            "url": "https://news.example.test/dup",
+            "claim_snippet": "2026 Live Election update for Candidate A.",
+            "fetched_at": "2026-04-22T02:02:00Z",
+        },
+        {
+            "source_id": "dup",
+            "url": "https://news.example.test/dup",
+            "claim_snippet": "2026 Live Election update for Candidate A.",
+            "fetched_at": "2026-04-22T02:01:00Z",
+        },
+        {
+            "source_id": "wire-unique",
+            "url": "https://news.example.test/unique",
+            "claim_snippet": "Candidate A remains uncertified in the 2026 Live Election.",
+            "fetched_at": "2026-04-22T02:00:00Z",
+        },
+    ]
+
+    filtered = _filter_rows(
+        rows,
+        phrases=("2026 live election", "candidate a"),
+        tokens=("2026", "live", "election", "candidate"),
+    )
+
+    assert [row["source_id"] for row in filtered] == ["dup", "wire-unique"]
 
 
 def test_build_query_terms_include_family_and_deadline_context():
