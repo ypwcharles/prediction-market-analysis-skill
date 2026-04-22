@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -33,7 +34,12 @@ class ScanCoverage:
     total_events: int
     total_markets: int
     total_candidates: int
+    shortlisted_candidates: int
     tradable_candidates: int
+    missing_deadline_candidates: int
+    missing_category_candidates: int
+    missing_outcome_candidates: int
+    missing_family_context_candidates: int
     rejected_inactive: int
     rejected_low_liquidity: int
     rejected_wide_spread: int
@@ -146,6 +152,14 @@ def run_scan(
             "degraded_reason": degraded_reason,
             "scanned_events": outcome.coverage.total_events,
             "scanned_contracts": outcome.coverage.total_candidates,
+            "shortlisted_candidates": outcome.coverage.shortlisted_candidates,
+            "retrieved_shortlist_candidates": 0,
+            "promoted_seed_count": len(alert_seeds),
+            "missing_deadline_candidates": outcome.coverage.missing_deadline_candidates,
+            "missing_category_candidates": outcome.coverage.missing_category_candidates,
+            "missing_outcome_candidates": outcome.coverage.missing_outcome_candidates,
+            "missing_family_context_candidates": outcome.coverage.missing_family_context_candidates,
+            "rejection_reasons_json": _serialize_rejection_reasons(outcome.rejected),
             "strict_count": len(outcome.tradable),
             "research_count": len(outcome.degraded),
             "skipped_count": outcome.coverage.skipped,
@@ -264,11 +278,22 @@ def _prefilter(
     total_markets = sum(
         len(event.get("markets", [])) for event in events if isinstance(event.get("markets"), list)
     )
+    missing_deadline_candidates = sum(1 for candidate in candidates if not candidate.event_end_time)
+    missing_category_candidates = sum(1 for candidate in candidates if not candidate.event_category)
+    missing_outcome_candidates = sum(1 for candidate in candidates if not candidate.outcome_name)
+    missing_family_context_candidates = sum(
+        1 for candidate in candidates if candidate.family_summary.sibling_count <= 0
+    )
     coverage = ScanCoverage(
         total_events=len(events),
         total_markets=total_markets,
         total_candidates=len(candidates),
+        shortlisted_candidates=len(tradable) + len(degraded),
         tradable_candidates=len(tradable),
+        missing_deadline_candidates=missing_deadline_candidates,
+        missing_category_candidates=missing_category_candidates,
+        missing_outcome_candidates=missing_outcome_candidates,
+        missing_family_context_candidates=missing_family_context_candidates,
         rejected_inactive=rejected_inactive,
         rejected_low_liquidity=rejected_low_liquidity,
         rejected_wide_spread=rejected_wide_spread,
@@ -289,7 +314,12 @@ def _dry_outcome() -> ScanOutcome:
             total_events=0,
             total_markets=0,
             total_candidates=0,
+            shortlisted_candidates=0,
             tradable_candidates=0,
+            missing_deadline_candidates=0,
+            missing_category_candidates=0,
+            missing_outcome_candidates=0,
+            missing_family_context_candidates=0,
             rejected_inactive=0,
             rejected_low_liquidity=0,
             rejected_wide_spread=0,
@@ -300,6 +330,7 @@ def _dry_outcome() -> ScanOutcome:
         degraded=(),
         rejected=(),
     )
+
 
 def _select_judgment_candidates(
     outcome: ScanOutcome,
@@ -436,3 +467,20 @@ def _seed_lookup_keys(candidate: ScanCandidate) -> tuple[str, ...]:
         )
     )
     return tuple(keys)
+
+
+def _serialize_rejection_reasons(rejected: Sequence[tuple[ScanCandidate, str]]) -> str:
+    payload: list[dict[str, object]] = []
+    for candidate, reason in rejected:
+        payload.append(
+            {
+                "event_id": candidate.event_id,
+                "market_id": candidate.market_id,
+                "condition_id": candidate.condition_id,
+                "event_slug": candidate.event_slug,
+                "market_slug": candidate.market_slug,
+                "question": candidate.question,
+                "reason": reason,
+            }
+        )
+    return json.dumps(payload, sort_keys=True)

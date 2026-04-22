@@ -15,6 +15,14 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             degraded_reason TEXT,
             scanned_events INTEGER DEFAULT 0,
             scanned_contracts INTEGER DEFAULT 0,
+            shortlisted_candidates INTEGER DEFAULT 0,
+            retrieved_shortlist_candidates INTEGER DEFAULT 0,
+            promoted_seed_count INTEGER DEFAULT 0,
+            missing_deadline_candidates INTEGER DEFAULT 0,
+            missing_category_candidates INTEGER DEFAULT 0,
+            missing_outcome_candidates INTEGER DEFAULT 0,
+            missing_family_context_candidates INTEGER DEFAULT 0,
+            rejection_reasons_json TEXT,
             strict_count INTEGER DEFAULT 0,
             research_count INTEGER DEFAULT 0,
             skipped_count INTEGER DEFAULT 0,
@@ -179,6 +187,14 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "cluster_expressions", "condition_id", "TEXT")
     _ensure_column(conn, "alerts", "condition_id", "TEXT")
     _ensure_column(conn, "feedback", "callback_query_id", "TEXT")
+    _ensure_column(conn, "runs", "shortlisted_candidates", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "retrieved_shortlist_candidates", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "promoted_seed_count", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "missing_deadline_candidates", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "missing_category_candidates", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "missing_outcome_candidates", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "missing_family_context_candidates", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "rejection_reasons_json", "TEXT")
     _dedupe_alert_rows(conn)
     conn.execute(
         """

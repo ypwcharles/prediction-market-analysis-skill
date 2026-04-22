@@ -6,7 +6,7 @@ from polymarket_alert_bot.config.settings import load_runtime_config
 from polymarket_alert_bot.models.records import SourceRegistry
 from polymarket_alert_bot.scanner.board_scan import AlertSeed
 from polymarket_alert_bot.scanner.family import CandidateFamilySummary
-from polymarket_alert_bot.sources.shortlist_retrieval import retrieve_shortlist_evidence
+from polymarket_alert_bot.sources.shortlist_retrieval import _filter_rows, retrieve_shortlist_evidence
 
 
 def test_retrieve_shortlist_evidence_filters_to_candidate_relevant_rows(tmp_path, monkeypatch):
@@ -83,6 +83,31 @@ def test_retrieve_shortlist_evidence_reports_degraded_sources(tmp_path, monkeypa
     assert result.items == ()
     assert "shortlist_news_failed:FileNotFoundError" in result.degraded_reasons
     assert "shortlist_x_failed:FileNotFoundError" in result.degraded_reasons
+
+
+def test_filter_rows_prefers_newer_evidence_when_scores_tie():
+    rows = [
+        {
+            "source_id": "old",
+            "url": "https://news.example.test/old",
+            "claim_snippet": "2026 Live Election update for Candidate A.",
+            "fetched_at": "2026-04-22T01:00:00Z",
+        },
+        {
+            "source_id": "new",
+            "url": "https://news.example.test/new",
+            "claim_snippet": "2026 Live Election update for Candidate A.",
+            "fetched_at": "2026-04-22T02:00:00Z",
+        },
+    ]
+
+    filtered = _filter_rows(
+        rows,
+        phrases=("2026 live election", "candidate a"),
+        tokens=("2026", "live", "election"),
+    )
+
+    assert [row["source_id"] for row in filtered] == ["new", "old"]
 
 
 def _seed() -> AlertSeed:

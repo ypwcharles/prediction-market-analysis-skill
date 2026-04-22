@@ -77,12 +77,18 @@ def execute_scan_flow(
     research_alert_ids: list[str] = []
     research_renderings: list[str] = []
     heartbeat_alert_id: str | None = None
+    retrieved_shortlist_candidates = 0
+    retrieval_degraded = False
 
     for seed in scan_result.alert_seeds:
         seed_now = _now_iso()
         existing_alert = repository.get_alert(seed.id)
         retrieval_result = retrieve_shortlist_evidence(seed, config, registry=registry)
         degraded_reasons.extend(retrieval_result.degraded_reasons)
+        if retrieval_result.items:
+            retrieved_shortlist_candidates += 1
+        if retrieval_result.degraded_reasons:
+            retrieval_degraded = True
         seed_evidence_degraded = evidence_degraded or bool(retrieval_result.degraded_reasons)
         parsed = _judge_seed(
             skill=skill,
@@ -183,6 +189,7 @@ def execute_scan_flow(
         )
 
     combined_degraded_reason = _combine_degraded_reason(*degraded_reasons)
+    run_evidence_degraded = evidence_degraded or retrieval_degraded
 
     if research_renderings:
         _deliver_message(
@@ -201,7 +208,7 @@ def execute_scan_flow(
                 "strict_count": len(strict_alert_ids),
                 "research_count": len(research_alert_ids),
                 "skipped_count": scan_result.outcome.coverage.skipped,
-                "degraded": scan_result.status == "degraded" or evidence_degraded,
+                "degraded": scan_result.status == "degraded" or run_evidence_degraded,
                 "degraded_reason": combined_degraded_reason,
             }
         )
@@ -244,6 +251,7 @@ def execute_scan_flow(
         SET strict_count = ?,
             research_count = ?,
             skipped_count = ?,
+            retrieved_shortlist_candidates = ?,
             heartbeat_sent = ?,
             finished_at = ?,
             degraded_reason = ?,
@@ -254,11 +262,12 @@ def execute_scan_flow(
             len(strict_alert_ids),
             len(research_alert_ids),
             scan_result.outcome.coverage.skipped,
+            retrieved_shortlist_candidates,
             1 if heartbeat_alert_id else 0,
             _now_iso(),
             combined_degraded_reason,
             "degraded"
-            if scan_result.status == "degraded" or evidence_degraded
+            if scan_result.status == "degraded" or run_evidence_degraded
             else scan_result.status,
             scan_result.run_id,
         ],

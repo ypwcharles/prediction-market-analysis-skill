@@ -9,6 +9,7 @@ from polymarket_alert_bot.config.settings import ensure_runtime_dirs, load_runti
 from polymarket_alert_bot.monitor.position_sync import MonitorOutcome
 from polymarket_alert_bot.runtime_flow import execute_monitor_flow
 from polymarket_alert_bot.scanner.clob_client import BookSnapshot, degraded_snapshot
+from polymarket_alert_bot.sources.shortlist_retrieval import ShortlistRetrievalResult
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 
@@ -379,7 +380,9 @@ def test_scan_command_prefers_shortlist_retrieval_and_passes_rich_snapshot(tmp_p
     assert context["candidate_facts"]["event_title"] == "2026 Live Election"
     assert context["candidate_facts"]["event_category"] == "Politics"
     assert context["candidate_facts"]["event_end_time"] == "2026-11-04T05:00:00Z"
-    assert context["candidate_facts"]["market_question"] == "Will Candidate A win in the live board?"
+    assert (
+        context["candidate_facts"]["market_question"] == "Will Candidate A win in the live board?"
+    )
     assert context["candidate_facts"]["outcome_name"] == "Candidate A"
     assert context["candidate_facts"]["family_summary"]["sibling_count"] == 1
     assert context["candidate_facts"]["family_summary"]["sibling_markets"][0]["market_id"] == (
@@ -566,6 +569,182 @@ def test_scan_command_dedupes_repeated_runs_into_the_same_alert_rows(tmp_path, m
     assert claim_mapping_count == 2
     assert trigger_count == 2
     assert run_count == 2
+
+
+def test_scan_command_marks_run_degraded_when_shortlist_retrieval_fails(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID", "-100123456")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH",
+        str(FIXTURES / "news_samples.json"),
+    )
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_X_SAMPLES_PATH",
+        str(FIXTURES / "x_samples.json"),
+    )
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_SCAN_MAX_JUDGMENT_CANDIDATES", "1")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys;"
+                    "json.dump({"
+                    "'alert_kind':'strict',"
+                    "'cluster_action':'create',"
+                    "'ttl_hours':6,"
+                    "'thesis':'shortlist degrade check',"
+                    "'side':'NO',"
+                    "'theoretical_edge_cents':12.0,"
+                    "'executable_edge_cents':9.0,"
+                    "'max_entry_cents':43.0,"
+                    "'suggested_size_usdc':100.0,"
+                    "'why_now':'shortlist retrieval degraded',"
+                    "'kill_criteria_text':'official confirmation',"
+                    "'summary':'summary',"
+                    "'watch_item':'watch',"
+                    "'citations':[{'claim':'Reuters confirms update.','source':{'id':'reuters','name':'Reuters','url':'https://www.reuters.com/test','tier':'primary','fetched_at':'2026-04-17T12:00:00Z'}},{'claim':'AP confirms update.','source':{'id':'ap','name':'AP','url':'https://apnews.com/test','tier':'primary','fetched_at':'2026-04-17T12:05:00Z'}}],"
+                    "'triggers':[],"
+                    "'archive_payload':{'summary':'archive'}"
+                    "},sys.stdout)"
+                ),
+            ]
+        ),
+    )
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_book(token_id: str) -> BookSnapshot:
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.49,
+            best_ask=0.51,
+            spread_bps=400.0,
+            slippage_bps=200.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.flows.scan.retrieve_shortlist_evidence",
+        lambda seed, config, registry: ShortlistRetrievalResult(
+            items=(),
+            degraded_reasons=("shortlist_x_failed:TimeoutError",),
+        ),
+    )
+
+    assert main(["scan"]) == 0
+
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    run_row = conn.execute(
+        """
+        SELECT status, degraded_reason, retrieved_shortlist_candidates
+        FROM runs
+        WHERE run_type = 'scan'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    assert dict(run_row) == {
+        "status": "degraded",
+        "degraded_reason": "shortlist_x_failed:TimeoutError",
+        "retrieved_shortlist_candidates": 0,
+    }
+    alert_row = conn.execute(
+        """
+        SELECT alert_kind
+        FROM alerts
+        WHERE run_id = (
+            SELECT id FROM runs WHERE run_type = 'scan' ORDER BY created_at DESC LIMIT 1
+        )
+          AND market_id = 'mkt-live-tradable'
+        """
+    ).fetchone()
+    assert alert_row["alert_kind"] == "strict_degraded"
+
+
+def test_scan_command_marks_heartbeat_degraded_when_shortlist_retrieval_fails(tmp_path, monkeypatch):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID", "-100123456")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_SCAN_MAX_JUDGMENT_CANDIDATES", "1")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys;"
+                    "json.dump({"
+                    "'alert_kind':'research',"
+                    "'cluster_action':'create',"
+                    "'ttl_hours':6,"
+                    "'summary':'heartbeat degrade check',"
+                    "'watch_item':'watch',"
+                    "'citations':[],"
+                    "'triggers':[],"
+                    "'archive_payload':{'summary':'archive'}"
+                    "},sys.stdout)"
+                ),
+            ]
+        ),
+    )
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_book(token_id: str) -> BookSnapshot:
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.49,
+            best_ask=0.51,
+            spread_bps=400.0,
+            slippage_bps=200.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.flows.scan.retrieve_shortlist_evidence",
+        lambda seed, config, registry: ShortlistRetrievalResult(
+            items=(),
+            degraded_reasons=("shortlist_x_failed:TimeoutError",),
+        ),
+    )
+
+    assert main(["scan"]) == 0
+
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    run_id = conn.execute(
+        "SELECT id FROM runs WHERE run_type = 'scan' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()["id"]
+    heartbeat_row = conn.execute(
+        """
+        SELECT archive_path
+        FROM alerts
+        WHERE run_id = ? AND alert_kind = 'heartbeat'
+        """,
+        [run_id],
+    ).fetchone()
+    assert heartbeat_row is not None
+    heartbeat_text = Path(heartbeat_row["archive_path"]).read_text(encoding="utf-8")
+    assert heartbeat_text.startswith("[DEGRADED]")
+    assert "shortlist_x_failed:TimeoutError" in heartbeat_text
 
 
 def _seed_monitor_source_alert(paths) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 
 from polymarket_alert_bot.config.settings import RuntimeConfig
 from polymarket_alert_bot.scanner.board_scan import AlertSeed
@@ -36,7 +37,9 @@ class ShortlistRetrievalResult:
     degraded_reasons: tuple[str, ...]
 
 
-def retrieve_shortlist_evidence(seed: AlertSeed, config: RuntimeConfig, *, registry) -> ShortlistRetrievalResult:
+def retrieve_shortlist_evidence(
+    seed: AlertSeed, config: RuntimeConfig, *, registry
+) -> ShortlistRetrievalResult:
     phrases, tokens = _build_query_terms(seed)
     if not phrases and not tokens:
         return ShortlistRetrievalResult(items=(), degraded_reasons=())
@@ -61,9 +64,7 @@ def retrieve_shortlist_evidence(seed: AlertSeed, config: RuntimeConfig, *, regis
             rows = load_feed_rows(x_source)
             filtered_rows = XClient().filter_rows(rows, allowed_handles=registry.x_handles)
             matched_rows = _filter_rows(filtered_rows, phrases=phrases, tokens=tokens)
-            retrieved_items.extend(
-                XClient().normalize_items(matched_rows)[:MAX_ITEMS_PER_SOURCE]
-            )
+            retrieved_items.extend(XClient().normalize_items(matched_rows)[:MAX_ITEMS_PER_SOURCE])
         except Exception as exc:
             degraded_reasons.append(f"shortlist_x_failed:{exc.__class__.__name__}")
 
@@ -130,7 +131,7 @@ def _filter_rows(
     scored.sort(
         key=lambda item: (
             -item[0],
-            str(item[1].get("fetched_at") or ""),
+            -_freshness_rank(item[1].get("fetched_at")),
             str(item[1].get("source_id") or ""),
         )
     )
@@ -177,3 +178,15 @@ def _slug_phrase(value: str | None) -> str | None:
     if not value:
         return None
     return value.replace("-", " ")
+
+
+def _freshness_rank(value: object) -> float:
+    if value is None:
+        return -1.0
+    text = str(value).strip()
+    if not text:
+        return -1.0
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return -1.0
