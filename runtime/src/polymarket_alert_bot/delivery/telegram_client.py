@@ -89,8 +89,11 @@ class TelegramClient:
         text: str,
         inline_keyboard: dict[str, Any] | None = None,
         parse_mode: str | None = None,
+        message_thread_id: str | None = None,
     ) -> TelegramMessageRef | None:
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
+        if message_thread_id:
+            payload["message_thread_id"] = message_thread_id
         if inline_keyboard:
             payload["reply_markup"] = inline_keyboard
         if parse_mode:
@@ -192,6 +195,7 @@ class TelegramClient:
         message_ref: TelegramMessageRef | None = None,
         inline_keyboard: dict[str, Any] | None = None,
         parse_mode: str | None = None,
+        message_thread_id: str | None = None,
     ) -> TelegramMessageRef | None:
         if message_ref is not None:
             edited = self.edit_message_ref(
@@ -207,6 +211,7 @@ class TelegramClient:
             text=text,
             inline_keyboard=inline_keyboard,
             parse_mode=parse_mode,
+            message_thread_id=message_thread_id,
         )
 
     def answer_callback_query(

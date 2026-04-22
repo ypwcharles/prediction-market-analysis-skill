@@ -447,6 +447,7 @@ def _deliver_message(
             text=text,
             message_ref=message_ref,
             inline_keyboard=keyboard,
+            message_thread_id=config.telegram_message_thread_id,
         )
 
 
