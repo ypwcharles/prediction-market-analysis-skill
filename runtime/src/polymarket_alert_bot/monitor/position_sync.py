@@ -316,7 +316,9 @@ def _build_observations(
         None if book_snapshot is None or book_snapshot.is_degraded else book_snapshot.slippage_bps
     )
     spread_bps = live_spread_bps if live_spread_bps is not None else trigger_row["spread_bps"]
-    slippage_bps = live_slippage_bps if live_slippage_bps is not None else trigger_row["slippage_bps"]
+    slippage_bps = (
+        live_slippage_bps if live_slippage_bps is not None else trigger_row["slippage_bps"]
+    )
     execution_cost_bps = None
     if live_spread_bps is not None and live_slippage_bps is not None:
         execution_cost_bps = float(live_spread_bps) + float(live_slippage_bps)
@@ -376,7 +378,12 @@ def _condition_still_met(trigger: dict[str, Any], *, observations: dict[str, obj
         observed_value = observation
     else:
         observed_value = None
-    return condition_met(trigger, observed_value=observed_value, observed_state=observed_state)
+    return condition_met(
+        trigger,
+        observed_value=observed_value,
+        observed_state=observed_state,
+        observations=observations,
+    )
 
 
 def _rearm_snoozed_triggers(

@@ -15,7 +15,6 @@ from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -228,6 +227,7 @@ def _confirm_callback_feedback(*, telegram: TelegramClient, event) -> None:
     telegram.send_message(
         chat_id=event.telegram_chat_id,
         text=f"{status_line}\n已记录到 runtime。",
+        message_thread_id=event.message_thread_id,
     )
 
 

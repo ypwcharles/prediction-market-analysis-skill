@@ -408,7 +408,9 @@ def test_run_monitor_uses_live_orderbook_for_execution_cost_triggers(monkeypatch
     assert trigger_row["last_fired_at"] == now_iso
 
 
-def test_run_monitor_does_not_fire_execution_cost_trigger_on_degraded_live_book(monkeypatch, tmp_path):
+def test_run_monitor_does_not_fire_execution_cost_trigger_on_degraded_live_book(
+    monkeypatch, tmp_path
+):
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
     paths = load_runtime_paths()
     ensure_runtime_dirs(paths)

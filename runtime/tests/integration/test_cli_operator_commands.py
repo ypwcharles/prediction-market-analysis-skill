@@ -5,6 +5,7 @@ import json
 import pytest
 
 from polymarket_alert_bot.cli import main
+from polymarket_alert_bot.delivery.callback_router import FeedbackEvent
 from polymarket_alert_bot.delivery.telegram_client import TelegramMessageRef
 from polymarket_alert_bot.flows import callback as callback_flow
 from polymarket_alert_bot.storage.db import connect_db
@@ -113,7 +114,9 @@ def test_callback_command_persists_feedback_and_claim(tmp_path, monkeypatch):
     }
 
 
-def test_callback_command_persists_feedback_even_if_telegram_side_effects_fail(tmp_path, monkeypatch):
+def test_callback_command_persists_feedback_even_if_telegram_side_effects_fail(
+    tmp_path, monkeypatch
+):
     data_dir = tmp_path / ".runtime-data"
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
@@ -185,6 +188,51 @@ def test_callback_command_persists_feedback_even_if_telegram_side_effects_fail(t
         "answer_callback_query",
         "clear_message_keyboard",
         "edit_message",
+    ]
+
+
+def test_callback_fallback_confirmation_preserves_message_thread_id() -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class FakeTelegramClient:
+        def clear_message_keyboard(self, **kwargs):
+            calls.append(("clear_message_keyboard", kwargs))
+            return False
+
+        def send_message(self, **kwargs):
+            calls.append(("send_message", kwargs))
+            return TelegramMessageRef(chat_id=str(kwargs["chat_id"]), message_id="fallback-thread")
+
+    event = FeedbackEvent(
+        feedback_type="seen",
+        action="ack",
+        action_label="已看",
+        update_id="upd-1",
+        callback_query_id="cb-thread",
+        callback_data="fb:ack:alert-thread:cluster-thread",
+        alert_id="alert-thread",
+        thesis_cluster_id="cluster-thread",
+        telegram_chat_id="-100123456",
+        telegram_message_id="58",
+        inline_message_id=None,
+        message_thread_id="8369",
+        message_text=None,
+        payload={},
+        callback_answer="收到，已标记为已看。",
+    )
+
+    callback_flow._confirm_callback_feedback(telegram=FakeTelegramClient(), event=event)
+
+    assert calls == [
+        ("clear_message_keyboard", {"chat_id": "-100123456", "message_id": "58"}),
+        (
+            "send_message",
+            {
+                "chat_id": "-100123456",
+                "text": "反馈状态：已看\n已记录到 runtime。",
+                "message_thread_id": "8369",
+            },
+        ),
     ]
 
 
