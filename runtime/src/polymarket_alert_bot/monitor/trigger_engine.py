@@ -29,9 +29,6 @@ def condition_met(
 
     actual = _parse_numeric(observed_value)
     expected = _parse_numeric(threshold_value)
-    if actual is None or expected is None:
-        return False
-
     operations = {
         "<": lambda left, right: left < right,
         "<=": lambda left, right: left <= right,
@@ -40,6 +37,10 @@ def condition_met(
         "eq": lambda left, right: left == right,
     }
     operation = operations.get(comparison)
+    if comparison == "eq" and (actual is None or expected is None):
+        return observed_state == str(threshold_value)
+    if actual is None or expected is None:
+        return False
     if operation is None:
         return False
     return operation(actual, expected)
@@ -135,6 +136,7 @@ def observation_key_for_threshold(threshold_kind: str | None) -> str:
         "position_size_shares": "position_size_shares",
         "position_state": "position_status",
         "position_status": "position_status",
+        "book_state": "book_state",
         "narrative": "narrative",
     }
     return aliases.get(normalized, normalized)

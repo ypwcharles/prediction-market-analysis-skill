@@ -263,6 +263,24 @@ def test_telegram_client_send_message_parses_enveloped_result() -> None:
     assert ref == TelegramMessageRef(chat_id="-100123", message_id="91")
 
 
+def test_telegram_client_send_message_includes_thread_id_when_provided() -> None:
+    def request_fn(method: str, payload: dict[str, object]) -> dict[str, object]:
+        assert method == "sendMessage"
+        assert payload["chat_id"] == "-100123"
+        assert payload["message_thread_id"] == "8369"
+        return {
+            "ok": True,
+            "result": {"chat": {"id": -100123}, "message_id": 92},
+        }
+
+    ref = TelegramClient(request_fn=request_fn).send_message(
+        chat_id="-100123",
+        text="hello topic",
+        message_thread_id="8369",
+    )
+    assert ref == TelegramMessageRef(chat_id="-100123", message_id="92")
+
+
 def test_telegram_client_upsert_falls_back_to_send_when_edit_target_missing() -> None:
     calls: list[tuple[str, dict[str, object]]] = []
 

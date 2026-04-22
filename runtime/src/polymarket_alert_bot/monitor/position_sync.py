@@ -323,6 +323,9 @@ def _build_observations(
         else trigger_row["slippage_bps"],
         "position_size_shares": position_row["position_size_shares"] if position_row else None,
         "position_status": position_row["position_status"] if position_row else None,
+        "book_state": "quotes_missing"
+        if book_snapshot is None or book_snapshot.is_degraded
+        else "quotes_available",
         "narrative": trigger_row["why_now"],
     }
 

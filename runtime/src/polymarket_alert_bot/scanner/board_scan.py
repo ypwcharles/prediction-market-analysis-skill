@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -97,6 +98,7 @@ def run_scan(
     clob_payload: Mapping[str, Any] | Sequence[Any] | None = None,
     judgment_seed_inputs: Mapping[str, object] | None = None,
     evidence_seed_inputs: Mapping[str, object] | None = None,
+    max_judgment_candidates: int | None = None,
 ) -> ScanRunResult:
     timestamp = datetime.now(UTC).isoformat()
     run_id = str(uuid4())
@@ -118,6 +120,7 @@ def run_scan(
         outcome,
         judgment_seed_inputs=judgment_seed_inputs or {},
         evidence_seed_inputs=evidence_seed_inputs or {},
+        max_judgment_candidates=max_judgment_candidates,
     )
 
     conn = connect_db(paths.db_path)
@@ -131,7 +134,7 @@ def run_scan(
             "started_at": timestamp,
             "finished_at": timestamp,
             "degraded_reason": degraded_reason,
-            "scanned_events": outcome.coverage.total_events,
+            "scanned_events": outcome.coverage.total_markets,
             "scanned_contracts": outcome.coverage.total_candidates,
             "strict_count": len(outcome.tradable),
             "research_count": len(outcome.degraded),
@@ -181,10 +184,13 @@ def _run_live_scan(config: RuntimeConfig) -> ScanOutcome:
 
 def _fetch_live_events(url: str, limit: int) -> list[dict[str, Any]]:
     try:
-        return fetch_events(url=url, limit=limit)
+        return fetch_events(url=url, limit=limit, active=True, closed=False)
     except TypeError:
-        # Support no-kwargs monkeypatch stubs in integration tests.
-        return fetch_events()
+        # Support simplified monkeypatch stubs in tests.
+        try:
+            return fetch_events(url=url, limit=limit)
+        except TypeError:
+            return fetch_events()
 
 
 def _fetch_live_book(token_id: str, url: str) -> BookSnapshot:
@@ -286,15 +292,101 @@ def _dry_outcome() -> ScanOutcome:
     )
 
 
+def _candidate_priority_key(candidate: ScanCandidate) -> tuple[int, int, float, float, str]:
+    liquidity = candidate.liquidity_usd or 0.0
+    spread_penalty = candidate.spread_bps if candidate.spread_bps is not None else 1_000_000.0
+    degraded_rank = 1 if candidate.is_degraded else 0
+    domain_rank = 0 if _is_supported_runtime_domain(candidate) else 1
+    return (
+        degraded_rank,
+        domain_rank,
+        -liquidity,
+        spread_penalty,
+        candidate.market_id,
+    )
+
+
+def _is_supported_runtime_domain(candidate: ScanCandidate) -> bool:
+    text = " ".join(filter(None, [candidate.question, candidate.rules_text or ""])).lower()
+    sports_markers = (
+        "nba",
+        "nfl",
+        "mlb",
+        "nhl",
+        "world cup",
+        "premier league",
+        "uefa",
+        "lineup",
+        "injury report",
+    )
+    crypto_markers = (
+        "bitcoin",
+        "btc",
+        "ethereum",
+        "eth",
+        "solana",
+        "sol",
+        "crypto",
+        "etf",
+        "on-chain",
+    )
+    politics_macro_markers = (
+        "president",
+        "election",
+        "ceasefire",
+        "taiwan",
+        "trump",
+        "fed",
+        "tariff",
+        "senate",
+        "house",
+        "ukraine",
+        "china",
+        "court",
+        "cpi",
+        "inflation",
+        "rate cut",
+    )
+    return any(
+        _text_matches_marker(text, marker)
+        for marker in sports_markers + crypto_markers + politics_macro_markers
+    )
+
+
+def _text_matches_marker(text: str, marker: str) -> bool:
+    if " " in marker or "-" in marker:
+        return marker in text
+    return re.search(rf"\b{re.escape(marker)}\b", text) is not None
+
+
+def _select_judgment_candidates(
+    outcome: ScanOutcome,
+    *,
+    max_candidates: int | None,
+) -> tuple[ScanCandidate, ...]:
+    ordered_candidates = sorted(
+        tuple(outcome.tradable) + tuple(outcome.degraded),
+        key=_candidate_priority_key,
+    )
+    if max_candidates is None or max_candidates <= 0:
+        return tuple(ordered_candidates)
+    return tuple(ordered_candidates[:max_candidates])
+
+
 def _build_alert_seeds(
     run_id: str,
     outcome: ScanOutcome,
     *,
     judgment_seed_inputs: Mapping[str, object],
     evidence_seed_inputs: Mapping[str, object],
+    max_judgment_candidates: int | None,
 ) -> tuple[AlertSeed, ...]:
     seeds: list[AlertSeed] = []
-    for candidate in tuple(outcome.tradable) + tuple(outcome.degraded):
+    selected_candidates = _select_judgment_candidates(
+        outcome,
+        max_candidates=max_judgment_candidates,
+    )
+    for candidate in selected_candidates:
         judgment_seed = _resolve_judgment_seed(candidate, judgment_seed_inputs)
         evidence_seeds = _resolve_evidence_seeds(candidate, evidence_seed_inputs)
         alert_kind = "scanner_seed_degraded" if candidate.is_degraded else "scanner_seed"

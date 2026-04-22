@@ -202,7 +202,7 @@ Why this order:
 
 ## Phase 6: Automated opportunity discovery loop
 
-**Objective:** Turn the runtime from “it runs” into “it finds things worth looking at.”
+**Objective:** Turn the runtime from "it runs" into "it finds things worth looking at."
 
 ### Scope
 - board scanning and filtering
@@ -210,7 +210,7 @@ Why this order:
 - quality instrumentation
 
 ### Required outcomes
-- define what counts as an “opportunity” for automated discovery:
+- define what counts as an "opportunity" for automated discovery:
   - rules-clean
   - executable
   - non-noisy
@@ -256,7 +256,7 @@ Keep the current hardening work on the existing stack. Do not create parallel ti
    - risk: live scan latency and cost blow up before the pipeline is selective enough
 
 3. **Pretending discovery quality without measurement**
-   - risk: the bot “finds opportunities” but actually just creates operator noise
+   - risk: the bot "finds opportunities" but actually just creates operator noise
 
 4. **Mixing hardening and product expansion in one PR**
    - risk: impossible review surface, fake progress

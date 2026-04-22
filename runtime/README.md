@@ -51,8 +51,10 @@ The compose file mounts a persistent named volume to `/app/.runtime-data`, so SQ
 - `POLYMARKET_ALERT_BOT_DATA_DIR`
 - `POLYMARKET_ALERT_BOT_DB_PATH`
 - `POLYMARKET_ALERT_BOT_SOURCES_PATH`
-- `POLYMARKET_ALERT_BOT_GAMMA_EVENTS_URL`
+- `POLYMARKET_ALERT_BOT_ENABLE_SCAN` (set this to `1` for real board discovery; if omitted, scan commands/service runs only record an empty dry run)
+- `POLYMARKET_ALERT_BOT_GAMMA_EVENTS_URL` (default `https://gamma-api.polymarket.com/markets`, because the events feed surfaces too many stale/closed markets for live discovery)
 - `POLYMARKET_ALERT_BOT_GAMMA_LIMIT`
+- `POLYMARKET_ALERT_BOT_SCAN_MAX_JUDGMENT_CANDIDATES` (default `2`; for live real-Hermes discovery, consider temporarily lowering it to `1` to keep each scan bounded)
 - `POLYMARKET_ALERT_BOT_CLOB_BOOK_URL`
 - `POLYMARKET_ALERT_BOT_POSITIONS_URL`
 - `POLYMARKET_ALERT_BOT_POSITIONS_USER`
@@ -63,8 +65,9 @@ The compose file mounts a persistent named volume to `/app/.runtime-data`, so SQ
 - `POLYMARKET_ALERT_BOT_TELEGRAM_WEBHOOK_SECRET`
 - `POLYMARKET_ALERT_BOT_JUDGMENT_COMMAND`
 - `POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD`
-- `POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS`
+- `POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS` (default `600`; real Hermes judgment on live upstream markets can exceed five minutes, so the old 90s and later 300s defaults were too low)
 - `POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID`
+- `POLYMARKET_ALERT_BOT_TELEGRAM_MESSAGE_THREAD_ID` (optional; set this for Telegram forum topics so alerts land in the intended topic instead of the main chat)
 - `POLYMARKET_ALERT_BOT_NEWS_FEED_URL`
 - `POLYMARKET_ALERT_BOT_X_FEED_URL`
 - `POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH`

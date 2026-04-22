@@ -140,8 +140,10 @@ Optional citation metadata:
 - Evidence-freshness expiry checks.
 - Rule-change monitoring checks.
 - Catalyst checkpoint checks.
+- Market-data rechecks when executable quotes disappear or return.
 
 Do not emit placeholder or ceremonial triggers that cannot be executed later.
+Each trigger should also carry machine-usable fields such as `threshold_kind`, `comparison`, and `requires_llm_recheck` when the runner can provide them.
 
 ## 8) Archive Payload Rules
 `archive_payload` must preserve durable judgment context for later retrieval and replay.

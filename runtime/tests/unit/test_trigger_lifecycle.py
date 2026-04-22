@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from polymarket_alert_bot.monitor.trigger_engine import (
     acknowledge_trigger,
     close_trigger,
+    condition_met,
     evaluate_stored_trigger,
     evaluate_trigger,
     rearm_trigger,
@@ -87,3 +88,40 @@ def test_evaluate_stored_trigger_marks_narrative_for_recheck():
     assert result["observation"] == "escalation"
     assert result["updated_trigger"]["state"] == "fired"
     assert result["updated_trigger"]["last_fired_at"] == now.isoformat()
+
+
+def test_condition_met_supports_string_eq_comparisons() -> None:
+    trigger = {
+        "comparison": "eq",
+        "threshold_value": "quotes_available",
+    }
+
+    assert condition_met(
+        trigger, observed_value="quotes_available", observed_state="quotes_available"
+    )
+    assert not condition_met(
+        trigger, observed_value="quotes_missing", observed_state="quotes_missing"
+    )
+
+
+def test_evaluate_stored_trigger_supports_market_data_recheck_state_changes() -> None:
+    now = datetime.now(UTC)
+    trigger = {
+        "id": "trg-4",
+        "trigger_type": "market_data_recheck",
+        "threshold_kind": "book_state",
+        "comparison": "state_change",
+        "threshold_value": "quotes_available",
+        "requires_llm_recheck": 0,
+        "state": "armed",
+    }
+    result = evaluate_stored_trigger(
+        trigger,
+        observations={"book_state": "quotes_available"},
+        now=now,
+    )
+
+    assert result["fired"] is True
+    assert result["requires_llm_recheck"] is False
+    assert result["observation"] == "quotes_available"
+    assert result["updated_trigger"]["state"] == "fired"
