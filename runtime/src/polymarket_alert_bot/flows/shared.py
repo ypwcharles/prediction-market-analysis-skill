@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Iterable
@@ -325,6 +327,30 @@ def _persisted_trigger_defaults(trigger: Trigger) -> dict[str, object]:
     )
 
 
+def _price_threshold_threshold_payload(trigger: Trigger) -> str | None:
+    condition_text = str(trigger.condition or "")
+    direct_match = re.search(
+        r"execution_cost(?:_bps)?\s*<=\s*([0-9]+(?:\.[0-9]+)?)",
+        condition_text,
+        flags=re.IGNORECASE,
+    )
+    if direct_match:
+        return re.sub(
+            r"\.0$", "", json.dumps({"execution_cost_bps_max": float(direct_match.group(1))})
+        )
+
+    component_matches = re.findall(
+        r"(spread_bps|slippage_bps)\s*<=\s*([0-9]+(?:\.[0-9]+)?)",
+        condition_text,
+        flags=re.IGNORECASE,
+    )
+    if component_matches:
+        thresholds = {f"{name.lower()}_max": float(value) for name, value in component_matches}
+        if {"spread_bps_max", "slippage_bps_max"} <= thresholds.keys():
+            return json.dumps(thresholds, sort_keys=True)
+    return None
+
+
 def _persisted_trigger_threshold_value(trigger: Trigger) -> str:
     if trigger.threshold_value not in (None, ""):
         return str(trigger.threshold_value)
@@ -335,6 +361,10 @@ def _persisted_trigger_threshold_value(trigger: Trigger) -> str:
     trigger_type = str(trigger.trigger_type or trigger.kind or "").strip().lower()
     if trigger_type == "market_data_recheck":
         return "quotes_available"
+    if trigger_type == "price_threshold":
+        threshold = _price_threshold_threshold_payload(trigger)
+        if threshold is not None:
+            return threshold
     return str(trigger.condition)
 
 

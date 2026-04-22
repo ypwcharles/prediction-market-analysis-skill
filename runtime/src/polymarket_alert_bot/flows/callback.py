@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from polymarket_alert_bot.flows.shared import _now_iso
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -87,11 +90,7 @@ def execute_callback_flow(
     config = runtime_config or load_runtime_config()
     if os.environ.get("TELEGRAM_BOT_TOKEN") and (config.telegram_chat_id or event.telegram_chat_id):
         with TelegramClient() as telegram:
-            telegram.answer_callback_query(
-                callback_query_id=event.callback_query_id,
-                text=event.callback_answer,
-            )
-            _confirm_callback_feedback(telegram=telegram, event=event)
+            _deliver_callback_feedback_side_effects(telegram=telegram, event=event)
 
     return CallbackFlowSummary(
         alert_id=event.alert_id,
@@ -228,7 +227,33 @@ def _confirm_callback_feedback(*, telegram: TelegramClient, event) -> None:
     telegram.send_message(
         chat_id=event.telegram_chat_id,
         text=f"{status_line}\n已记录到 runtime。",
+        message_thread_id=event.message_thread_id,
     )
+
+
+def _deliver_callback_feedback_side_effects(*, telegram: TelegramClient, event) -> None:
+    try:
+        telegram.answer_callback_query(
+            callback_query_id=event.callback_query_id,
+            text=event.callback_answer,
+        )
+    except Exception as exc:
+        logger.warning(
+            "callback query acknowledgement failed for alert %s (callback_query_id=%s): %s",
+            event.alert_id,
+            event.callback_query_id,
+            exc,
+        )
+
+    try:
+        _confirm_callback_feedback(telegram=telegram, event=event)
+    except Exception as exc:
+        logger.warning(
+            "callback feedback confirmation failed for alert %s (callback_query_id=%s): %s",
+            event.alert_id,
+            event.callback_query_id,
+            exc,
+        )
 
 
 def _callback_status_line(action_label: str) -> str:

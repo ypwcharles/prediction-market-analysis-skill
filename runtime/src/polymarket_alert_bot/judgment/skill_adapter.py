@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import signal
 import subprocess
 from collections.abc import Callable
 from typing import Any
@@ -101,25 +102,43 @@ class SkillAdapter:
 
     @staticmethod
     def _run_external_command(command: list[str], payload_json: str, timeout_seconds: int) -> str:
+        process: subprocess.Popen[str] | None = None
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
-                input=payload_json,
-                capture_output=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True,
+            )
+            stdout_text, stderr_text = process.communicate(
+                input=payload_json,
                 timeout=timeout_seconds,
-                check=False,
             )
         except subprocess.TimeoutExpired as exc:
+            if process is not None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                finally:
+                    try:
+                        process.communicate(timeout=1)
+                    except Exception:
+                        pass
             raise TimeoutError("external skill runner timed out") from exc
 
-        if completed.returncode != 0:
-            stderr_text = (completed.stderr or "").strip()
+        if process is None:
+            raise RuntimeError("external runner failed to start")
+
+        if process.returncode != 0:
+            stderr_text = (stderr_text or "").strip()
             raise RuntimeError(
-                f"external runner exited with code {completed.returncode}: {stderr_text}"
+                f"external runner exited with code {process.returncode}: {stderr_text}"
             )
 
-        stdout_text = (completed.stdout or "").strip()
+        stdout_text = (stdout_text or "").strip()
         if not stdout_text:
             raise RuntimeError("external runner returned empty stdout")
         return stdout_text

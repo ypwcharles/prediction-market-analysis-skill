@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+
 from polymarket_alert_bot.flows.shared import (
     _persisted_trigger_comparison,
     _persisted_trigger_defaults,
@@ -7,7 +11,8 @@ from polymarket_alert_bot.flows.shared import (
     _persisted_trigger_threshold_kind,
     _persisted_trigger_threshold_value,
 )
-from polymarket_alert_bot.judgment.result_parser import Trigger
+from polymarket_alert_bot.judgment.result_parser import Trigger, parse_judgment_result
+from polymarket_alert_bot.monitor.trigger_engine import evaluate_stored_trigger
 
 
 def _trigger(*, trigger_type: str, kind: str = "generic") -> Trigger:
@@ -90,3 +95,67 @@ def test_explicit_requires_llm_recheck_false_beats_trigger_defaults() -> None:
     )
 
     assert _persisted_trigger_requires_recheck(trigger) is False
+
+
+def test_real_hermes_price_threshold_condition_derives_execution_cost_threshold() -> None:
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "real_hermes_monitor_output.json"
+    parsed = parse_judgment_result(json.loads(fixture.read_text(encoding="utf-8")))
+    trigger = next(t for t in parsed.triggers if t.trigger_type == "price_threshold")
+
+    assert json.loads(_persisted_trigger_threshold_value(trigger)) == {
+        "slippage_bps_max": 100.0,
+        "spread_bps_max": 200.0,
+    }
+
+
+def test_real_hermes_price_threshold_condition_can_fire_after_threshold_derivation() -> None:
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "real_hermes_monitor_output.json"
+    parsed = parse_judgment_result(json.loads(fixture.read_text(encoding="utf-8")))
+    trigger = next(t for t in parsed.triggers if t.trigger_type == "price_threshold")
+    now = datetime.now(UTC)
+
+    persisted_trigger = {
+        "id": "trg-real-fixture",
+        "trigger_type": trigger.trigger_type,
+        "threshold_kind": _persisted_trigger_defaults(trigger)["threshold_kind"],
+        "comparison": _persisted_trigger_defaults(trigger)["comparison"],
+        "threshold_value": _persisted_trigger_threshold_value(trigger),
+        "requires_llm_recheck": 1 if _persisted_trigger_requires_recheck(trigger) else 0,
+        "state": "armed",
+    }
+
+    result = evaluate_stored_trigger(
+        persisted_trigger,
+        observations={"spread_bps": 180.0, "slippage_bps": 90.0, "execution_cost_bps": 270.0},
+        now=now,
+    )
+
+    assert result["fired"] is True
+    assert result["requires_llm_recheck"] is True
+    assert result["updated_trigger"]["state"] == "fired"
+
+
+def test_real_hermes_price_threshold_condition_does_not_fire_on_sum_only_false_positive() -> None:
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "real_hermes_monitor_output.json"
+    parsed = parse_judgment_result(json.loads(fixture.read_text(encoding="utf-8")))
+    trigger = next(t for t in parsed.triggers if t.trigger_type == "price_threshold")
+    now = datetime.now(UTC)
+
+    persisted_trigger = {
+        "id": "trg-real-fixture-false-positive",
+        "trigger_type": trigger.trigger_type,
+        "threshold_kind": _persisted_trigger_defaults(trigger)["threshold_kind"],
+        "comparison": _persisted_trigger_defaults(trigger)["comparison"],
+        "threshold_value": _persisted_trigger_threshold_value(trigger),
+        "requires_llm_recheck": 1 if _persisted_trigger_requires_recheck(trigger) else 0,
+        "state": "armed",
+    }
+
+    result = evaluate_stored_trigger(
+        persisted_trigger,
+        observations={"spread_bps": 50.0, "slippage_bps": 200.0, "execution_cost_bps": 250.0},
+        now=now,
+    )
+
+    assert result["fired"] is False
+    assert result["updated_trigger"]["state"] == "armed"
