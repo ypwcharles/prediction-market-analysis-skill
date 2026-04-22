@@ -79,10 +79,14 @@ class Trigger(BaseModel):
     trigger_state: str | None = None
     observation: str | None = None
     suggested_action: str | None = None
+    threshold_kind: str | None = None
+    comparison: str | None = None
     threshold: str | float | int | None = None
+    threshold_value: str | float | int | None = None
     observed_value: str | float | int | None = None
     fired_at: str | None = None
     next_check_at: str | None = None
+    requires_llm_recheck: bool | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -121,6 +125,16 @@ class Trigger(BaseModel):
         payload["condition"] = derived_condition
         payload["metadata"] = metadata_payload
         payload.setdefault("trigger_type", payload.get("trigger_type") or payload.get("kind"))
+        if payload.get("threshold") in (None, "") and payload.get("threshold_value") not in (
+            None,
+            "",
+        ):
+            payload["threshold"] = payload.get("threshold_value")
+        if payload.get("threshold_value") in (None, "") and payload.get("threshold") not in (
+            None,
+            "",
+        ):
+            payload["threshold_value"] = payload.get("threshold")
         return payload
 
 

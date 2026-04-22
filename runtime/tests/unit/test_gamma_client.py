@@ -78,3 +78,55 @@ def test_normalize_events_accepts_market_payloads_with_clob_token_ids() -> None:
     assert market["token_id"] == "token-yes"
     assert market["status"] == "open"
     assert market["active"] is True
+
+
+def test_normalize_events_groups_market_rows_under_one_event() -> None:
+    raw_market_payload = [
+        {
+            "id": "market-1",
+            "slug": "candidate-a",
+            "question": "Candidate A wins?",
+            "description": "Market A description.",
+            "active": True,
+            "closed": False,
+            "conditionId": "cond-a",
+            "clobTokenIds": '["token-a-yes", "token-a-no"]',
+            "liquidity": "64597.4311",
+            "events": [
+                {
+                    "id": "event-1",
+                    "slug": "election-2026",
+                    "title": "Election 2026",
+                    "description": "Event-level description.",
+                    "resolutionSource": "Official announcement",
+                }
+            ],
+        },
+        {
+            "id": "market-2",
+            "slug": "candidate-b",
+            "question": "Candidate B wins?",
+            "description": "Market B description.",
+            "active": True,
+            "closed": False,
+            "conditionId": "cond-b",
+            "clobTokenIds": '["token-b-yes", "token-b-no"]',
+            "liquidity": "54597.4311",
+            "events": [
+                {
+                    "id": "event-1",
+                    "slug": "election-2026",
+                    "title": "Election 2026",
+                    "description": "Event-level description.",
+                    "resolutionSource": "Official announcement",
+                }
+            ],
+        },
+    ]
+
+    normalized = normalize_events(raw_market_payload)
+
+    assert len(normalized) == 1
+    assert normalized[0]["id"] == "event-1"
+    assert normalized[0]["slug"] == "election-2026"
+    assert [market["id"] for market in normalized[0]["markets"]] == ["market-1", "market-2"]

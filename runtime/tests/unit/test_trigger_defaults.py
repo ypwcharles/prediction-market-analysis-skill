@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from polymarket_alert_bot.flows.shared import (
+    _persisted_trigger_comparison,
     _persisted_trigger_defaults,
     _persisted_trigger_requires_recheck,
+    _persisted_trigger_threshold_kind,
     _persisted_trigger_threshold_value,
 )
 from polymarket_alert_bot.judgment.result_parser import Trigger, parse_judgment_result
@@ -51,6 +53,25 @@ def test_persisted_trigger_defaults_use_machine_semantics_for_market_data_rechec
         "comparison": "state_change",
         "requires_llm_recheck": False,
     }
+
+
+def test_explicit_market_data_recheck_fields_beat_hardcoded_defaults() -> None:
+    trigger = Trigger.model_validate(
+        {
+            "trigger_type": "market_data_recheck",
+            "kind": "market_data_recheck",
+            "condition": "Recheck after quotes disappear",
+            "threshold_kind": "book_state",
+            "comparison": "state_change",
+            "threshold_value": "quotes_missing",
+            "requires_llm_recheck": False,
+        }
+    )
+
+    assert _persisted_trigger_threshold_kind(trigger) == "book_state"
+    assert _persisted_trigger_comparison(trigger) == "state_change"
+    assert _persisted_trigger_threshold_value(trigger) == "quotes_missing"
+    assert _persisted_trigger_requires_recheck(trigger) is False
 
 
 def test_persisted_trigger_defaults_use_machine_semantics_for_price_thresholds() -> None:

@@ -178,10 +178,17 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
     assert all(row["source_id"] == "reuters" for row in claim_mappings)
 
     triggers = conn.execute(
-        "SELECT trigger_type, state, suggested_action FROM triggers ORDER BY id"
+        """
+        SELECT trigger_type, threshold_kind, comparison, threshold_value, state, suggested_action
+        FROM triggers
+        ORDER BY id
+        """
     ).fetchall()
     assert len(triggers) == 2
     assert all(row["trigger_type"] == "price_reprice" for row in triggers)
+    assert all(row["threshold_kind"] == "price" for row in triggers)
+    assert all(row["comparison"] == "<=" for row in triggers)
+    assert all(row["threshold_value"] == "43" for row in triggers)
     assert all(row["state"] == "armed" for row in triggers)
 
 
