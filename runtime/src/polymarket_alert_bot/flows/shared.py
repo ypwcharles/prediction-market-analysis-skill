@@ -44,23 +44,39 @@ def _load_configured_evidence(config: RuntimeConfig, *, registry) -> EvidenceLoa
 
 
 def _merge_evidence(
-    seed: AlertSeed, configured_items: Iterable[EvidenceItem]
+    seed: AlertSeed,
+    configured_items: Iterable[EvidenceItem],
+    *,
+    retrieved_items: Iterable[EvidenceItem] = (),
 ) -> list[EvidenceItem]:
-    merged = list(configured_items)
+    merged: list[EvidenceItem] = []
+    seen: set[tuple[str, str, str]] = set()
+    base_items = tuple(retrieved_items)
+    if not base_items:
+        base_items = tuple(configured_items)
+    for item in base_items:
+        key = (item.source_id, item.url, item.claim_snippet)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
     for raw in seed.evidence_seeds:
         if "source_kind" not in raw:
             continue
-        merged.append(
-            EvidenceItem(
-                source_id=str(raw.get("source_id") or raw.get("source") or "seed"),
-                source_kind=str(raw.get("source_kind") or raw.get("source") or "unknown"),
-                fetched_at=str(raw.get("fetched_at") or _now_iso()),
-                url=str(raw.get("url") or "about:blank"),
-                claim_snippet=str(raw.get("claim_snippet") or raw.get("claim") or "seed evidence"),
-                tier=str(raw.get("tier") or ""),
-                conflict_status=str(raw["conflict_status"]) if raw.get("conflict_status") else None,
-            )
+        item = EvidenceItem(
+            source_id=str(raw.get("source_id") or raw.get("source") or "seed"),
+            source_kind=str(raw.get("source_kind") or raw.get("source") or "unknown"),
+            fetched_at=str(raw.get("fetched_at") or _now_iso()),
+            url=str(raw.get("url") or "about:blank"),
+            claim_snippet=str(raw.get("claim_snippet") or raw.get("claim") or "seed evidence"),
+            tier=str(raw.get("tier") or ""),
+            conflict_status=str(raw["conflict_status"]) if raw.get("conflict_status") else None,
         )
+        key = (item.source_id, item.url, item.claim_snippet)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
     return merged
 
 
@@ -429,15 +445,24 @@ def _replace_triggers(
 
 def _seed_candidate_facts(seed: AlertSeed) -> dict[str, Any]:
     return {
+        "platform": "Polymarket",
         "event_id": seed.event_id,
+        "event_title": seed.event_title,
+        "event_category": seed.event_category,
+        "event_end_time": seed.event_end_time,
         "market_id": seed.market_id,
+        "market_question": seed.question,
+        "outcome_name": seed.outcome_name,
         "token_id": seed.token_id,
         "condition_id": seed.condition_id,
         "event_slug": seed.event_slug,
         "market_slug": seed.market_slug,
         "market_link": seed.market_link,
+        "market_url": seed.market_link,
         "expression_summary": seed.expression_summary,
         "expression_key": seed.expression_key,
+        "family_summary": seed.family_summary.as_dict(),
+        "ranking_summary": seed.ranking_summary,
         "rules_text": seed.rules_text or "",
         "degraded_reason": seed.degraded_reason,
     }
@@ -445,6 +470,11 @@ def _seed_candidate_facts(seed: AlertSeed) -> dict[str, Any]:
 
 def _seed_executable_fields(seed: AlertSeed) -> dict[str, Any]:
     return {
+        "best_bid_cents": seed.best_bid_cents,
+        "best_ask_cents": seed.best_ask_cents,
+        "mid_cents": seed.mid_cents,
+        "last_price_cents": seed.last_price_cents,
+        "max_entry_cents": seed.best_ask_cents,
         "spread_bps": seed.spread_bps,
         "slippage_bps": seed.slippage_bps,
         "is_degraded": seed.is_degraded,

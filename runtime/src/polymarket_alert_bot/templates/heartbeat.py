@@ -29,6 +29,11 @@ def render_heartbeat(payload: Mapping[str, Any]) -> str:
     degraded = bool(payload.get("degraded") or archive_payload.get("degraded"))
     scan_run_id = _resolve(payload, archive_payload, "scan_run_id")
     monitor_run_id = _resolve(payload, archive_payload, "monitor_run_id")
+    scanned_events = _resolve(payload, counts, "scanned_events")
+    scanned_contracts = _resolve(payload, counts, "scanned_contracts")
+    shortlisted_candidates = _resolve(payload, counts, "shortlisted_candidates")
+    retrieved_shortlist_candidates = _resolve(payload, counts, "retrieved_shortlist_candidates")
+    promoted_seed_count = _resolve(payload, counts, "promoted_seed_count")
     strict_count = _resolve(payload, counts, "strict_count")
     research_count = _resolve(payload, counts, "research_count")
     skipped_count = _resolve(payload, counts, "skipped_count")
@@ -44,6 +49,10 @@ def render_heartbeat(payload: Mapping[str, Any]) -> str:
             f"[{mode}]",
             f"scan run: {_as_text(scan_run_id)}",
             f"monitor run: {_as_text(monitor_run_id)}",
+            "events/contracts/shortlist/retrieved/promoted: "
+            f"{_as_text(scanned_events)}/{_as_text(scanned_contracts)}/"
+            f"{_as_text(shortlisted_candidates)}/{_as_text(retrieved_shortlist_candidates)}/"
+            f"{_as_text(promoted_seed_count)}",
             f"strict/research/skipped: {_as_text(strict_count)}/{_as_text(research_count)}/{_as_text(skipped_count)}",
             f"reason: {_as_text(degraded_reason)}",
         ]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import json
 import os
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,9 +16,11 @@ from polymarket_alert_bot.scanner.clob_client import (
     degraded_snapshot,
     fetch_book,
 )
+from polymarket_alert_bot.scanner.family import CandidateFamilySummary
 from polymarket_alert_bot.scanner.gamma_client import fetch_events, normalize_events
 from polymarket_alert_bot.scanner.market_link import build_polymarket_market_url
 from polymarket_alert_bot.scanner.normalizer import ScanCandidate, normalize_candidates
+from polymarket_alert_bot.scanner.ranking import build_ranking_summary, select_judgment_candidates
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
@@ -32,7 +34,12 @@ class ScanCoverage:
     total_events: int
     total_markets: int
     total_candidates: int
+    shortlisted_candidates: int
     tradable_candidates: int
+    missing_deadline_candidates: int
+    missing_category_candidates: int
+    missing_outcome_candidates: int
+    missing_family_context_candidates: int
     rejected_inactive: int
     rejected_low_liquidity: int
     rejected_wide_spread: int
@@ -63,21 +70,32 @@ class AlertSeed:
     id: str
     run_id: str
     event_id: str
+    event_title: str | None
+    event_category: str | None
+    event_end_time: str | None
     market_id: str
     token_id: str
     condition_id: str | None
     event_slug: str | None
     market_slug: str | None
+    question: str
+    outcome_name: str | None
     market_link: str | None
     alert_kind: str
     dedupe_key: str
     expression_key: str
     expression_summary: str
     rules_text: str | None
+    best_bid_cents: float | None
+    best_ask_cents: float | None
+    mid_cents: float | None
+    last_price_cents: float | None
     spread_bps: float | None
     slippage_bps: float | None
     is_degraded: bool
     degraded_reason: str | None
+    family_summary: CandidateFamilySummary
+    ranking_summary: dict[str, Any]
     judgment_seed: dict[str, Any] | None
     evidence_seeds: tuple[dict[str, Any], ...]
 
@@ -134,8 +152,16 @@ def run_scan(
             "started_at": timestamp,
             "finished_at": timestamp,
             "degraded_reason": degraded_reason,
-            "scanned_events": outcome.coverage.total_markets,
+            "scanned_events": outcome.coverage.total_events,
             "scanned_contracts": outcome.coverage.total_candidates,
+            "shortlisted_candidates": outcome.coverage.shortlisted_candidates,
+            "retrieved_shortlist_candidates": 0,
+            "promoted_seed_count": len(alert_seeds),
+            "missing_deadline_candidates": outcome.coverage.missing_deadline_candidates,
+            "missing_category_candidates": outcome.coverage.missing_category_candidates,
+            "missing_outcome_candidates": outcome.coverage.missing_outcome_candidates,
+            "missing_family_context_candidates": outcome.coverage.missing_family_context_candidates,
+            "rejection_reasons_json": _serialize_rejection_reasons(outcome.rejected),
             "strict_count": len(outcome.tradable),
             "research_count": len(outcome.degraded),
             "skipped_count": outcome.coverage.skipped,
@@ -254,11 +280,22 @@ def _prefilter(
     total_markets = sum(
         len(event.get("markets", [])) for event in events if isinstance(event.get("markets"), list)
     )
+    missing_deadline_candidates = sum(1 for candidate in candidates if not candidate.event_end_time)
+    missing_category_candidates = sum(1 for candidate in candidates if not candidate.event_category)
+    missing_outcome_candidates = sum(1 for candidate in candidates if not candidate.outcome_name)
+    missing_family_context_candidates = sum(
+        1 for candidate in candidates if candidate.family_summary.sibling_count <= 0
+    )
     coverage = ScanCoverage(
         total_events=len(events),
         total_markets=total_markets,
         total_candidates=len(candidates),
+        shortlisted_candidates=len(tradable) + len(degraded),
         tradable_candidates=len(tradable),
+        missing_deadline_candidates=missing_deadline_candidates,
+        missing_category_candidates=missing_category_candidates,
+        missing_outcome_candidates=missing_outcome_candidates,
+        missing_family_context_candidates=missing_family_context_candidates,
         rejected_inactive=rejected_inactive,
         rejected_low_liquidity=rejected_low_liquidity,
         rejected_wide_spread=rejected_wide_spread,
@@ -279,7 +316,12 @@ def _dry_outcome() -> ScanOutcome:
             total_events=0,
             total_markets=0,
             total_candidates=0,
+            shortlisted_candidates=0,
             tradable_candidates=0,
+            missing_deadline_candidates=0,
+            missing_category_candidates=0,
+            missing_outcome_candidates=0,
+            missing_family_context_candidates=0,
             rejected_inactive=0,
             rejected_low_liquidity=0,
             rejected_wide_spread=0,
@@ -292,85 +334,15 @@ def _dry_outcome() -> ScanOutcome:
     )
 
 
-def _candidate_priority_key(candidate: ScanCandidate) -> tuple[int, int, float, float, str]:
-    liquidity = candidate.liquidity_usd or 0.0
-    spread_penalty = candidate.spread_bps if candidate.spread_bps is not None else 1_000_000.0
-    degraded_rank = 1 if candidate.is_degraded else 0
-    domain_rank = 0 if _is_supported_runtime_domain(candidate) else 1
-    return (
-        degraded_rank,
-        domain_rank,
-        -liquidity,
-        spread_penalty,
-        candidate.market_id,
-    )
-
-
-def _is_supported_runtime_domain(candidate: ScanCandidate) -> bool:
-    text = " ".join(filter(None, [candidate.question, candidate.rules_text or ""])).lower()
-    sports_markers = (
-        "nba",
-        "nfl",
-        "mlb",
-        "nhl",
-        "world cup",
-        "premier league",
-        "uefa",
-        "lineup",
-        "injury report",
-    )
-    crypto_markers = (
-        "bitcoin",
-        "btc",
-        "ethereum",
-        "eth",
-        "solana",
-        "sol",
-        "crypto",
-        "etf",
-        "on-chain",
-    )
-    politics_macro_markers = (
-        "president",
-        "election",
-        "ceasefire",
-        "taiwan",
-        "trump",
-        "fed",
-        "tariff",
-        "senate",
-        "house",
-        "ukraine",
-        "china",
-        "court",
-        "cpi",
-        "inflation",
-        "rate cut",
-    )
-    return any(
-        _text_matches_marker(text, marker)
-        for marker in sports_markers + crypto_markers + politics_macro_markers
-    )
-
-
-def _text_matches_marker(text: str, marker: str) -> bool:
-    if " " in marker or "-" in marker:
-        return marker in text
-    return re.search(rf"\b{re.escape(marker)}\b", text) is not None
-
-
 def _select_judgment_candidates(
     outcome: ScanOutcome,
     *,
     max_candidates: int | None,
 ) -> tuple[ScanCandidate, ...]:
-    ordered_candidates = sorted(
+    return select_judgment_candidates(
         tuple(outcome.tradable) + tuple(outcome.degraded),
-        key=_candidate_priority_key,
+        max_candidates=max_candidates,
     )
-    if max_candidates is None or max_candidates <= 0:
-        return tuple(ordered_candidates)
-    return tuple(ordered_candidates[:max_candidates])
 
 
 def _build_alert_seeds(
@@ -396,11 +368,16 @@ def _build_alert_seeds(
                 id=str(uuid5(NAMESPACE_URL, f"alert::{dedupe_key}")),
                 run_id=run_id,
                 event_id=candidate.event_id,
+                event_title=candidate.event_title,
+                event_category=candidate.event_category,
+                event_end_time=candidate.event_end_time,
                 market_id=candidate.market_id,
                 token_id=candidate.token_id,
                 condition_id=candidate.condition_id,
                 event_slug=candidate.event_slug,
                 market_slug=candidate.market_slug,
+                question=candidate.question,
+                outcome_name=candidate.outcome_name,
                 market_link=build_polymarket_market_url(
                     event_slug=candidate.event_slug,
                     market_slug=candidate.market_slug,
@@ -410,10 +387,16 @@ def _build_alert_seeds(
                 expression_key=candidate.expression_key,
                 expression_summary=candidate.expression_summary,
                 rules_text=candidate.rules_text,
+                best_bid_cents=candidate.best_bid_cents,
+                best_ask_cents=candidate.best_ask_cents,
+                mid_cents=candidate.mid_cents,
+                last_price_cents=candidate.last_price_cents,
                 spread_bps=candidate.spread_bps,
                 slippage_bps=candidate.slippage_bps,
                 is_degraded=candidate.is_degraded,
                 degraded_reason=candidate.degraded_reason,
+                family_summary=candidate.family_summary,
+                ranking_summary=build_ranking_summary(candidate).as_dict(),
                 judgment_seed=judgment_seed,
                 evidence_seeds=evidence_seeds,
             )
@@ -488,3 +471,20 @@ def _seed_lookup_keys(candidate: ScanCandidate) -> tuple[str, ...]:
         )
     )
     return tuple(keys)
+
+
+def _serialize_rejection_reasons(rejected: Sequence[tuple[ScanCandidate, str]]) -> str:
+    payload: list[dict[str, object]] = []
+    for candidate, reason in rejected:
+        payload.append(
+            {
+                "event_id": candidate.event_id,
+                "market_id": candidate.market_id,
+                "condition_id": candidate.condition_id,
+                "event_slug": candidate.event_slug,
+                "market_slug": candidate.market_slug,
+                "question": candidate.question,
+                "reason": reason,
+            }
+        )
+    return json.dumps(payload, sort_keys=True)

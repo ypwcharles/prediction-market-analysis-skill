@@ -2,13 +2,18 @@
   {
     "id": "event-live-election",
     "slug": "live-election-2026",
+    "title": "2026 Live Election",
+    "category": "Politics",
+    "endDate": "2026-11-04T05:00:00Z",
     "description": "Settlement uses certified election authority result.",
     "markets": [
       {
         "id": "mkt-live-tradable",
         "slug": "candidate-a-wins-live",
         "question": "Will Candidate A win in the live board?",
+        "outcome": "Candidate A",
         "rules": "Resolves YES only if Candidate A is certified as winner.",
+        "lastTradePrice": 0.505,
         "status": "open",
         "active": true,
         "conditionId": "cond-live-a",
@@ -19,7 +24,9 @@
         "id": "mkt-live-degraded",
         "slug": "candidate-b-wins-live",
         "question": "Will Candidate B win in the live board?",
+        "outcome": "Candidate B",
         "rules": "Resolves YES only if Candidate B is certified as winner.",
+        "lastTradePrice": 0.455,
         "status": "open",
         "active": true,
         "condition_id": "cond-live-b",

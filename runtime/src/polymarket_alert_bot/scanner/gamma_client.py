@@ -76,6 +76,10 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
         event_title = _string_or_none(event_context.get("title")) or _string_or_none(
             event_context.get("question")
         )
+        event_category = _string_or_none(event_context.get("category")) or _string_or_none(
+            raw_event.get("category")
+        )
+        event_end_time = _extract_event_end_time(event_context, raw_event)
         event_rules_text = _compose_rules_text(
             event_context,
             fields=(
@@ -99,6 +103,8 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                 "id": event_id,
                 "slug": event_slug,
                 "title": event_title,
+                "category": event_category,
+                "end_time": event_end_time,
                 "rules_text": event_rules_text,
                 "markets": [],
             }
@@ -112,6 +118,10 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                 normalized_event["slug"] = event_slug
             if not normalized_event.get("title") and event_title is not None:
                 normalized_event["title"] = event_title
+            if not normalized_event.get("category") and event_category is not None:
+                normalized_event["category"] = event_category
+            if not normalized_event.get("end_time") and event_end_time is not None:
+                normalized_event["end_time"] = event_end_time
 
         existing_market_ids = {
             market.get("id")
@@ -131,6 +141,8 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             status = _derive_market_status(raw_market)
             active = bool(raw_market.get("active", False))
             liquidity_usd = _to_float(raw_market.get("liquidity"))
+            outcome_name = _extract_outcome_name(raw_market)
+            last_price = _extract_last_price(raw_market)
             market_rules_text = _compose_rules_text(
                 raw_market,
                 fields=(
@@ -153,6 +165,8 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                     "active": active,
                     "token_id": token_id,
                     "condition_id": condition_id,
+                    "outcome_name": outcome_name,
+                    "last_price": last_price,
                     "liquidity_usd": liquidity_usd,
                     "rules_text": rules_text,
                 }
@@ -234,6 +248,60 @@ def _extract_condition_id(raw_market: dict[str, Any]) -> str | None:
     camel = _string_or_none(raw_market.get("conditionId"))
     if camel is not None:
         return camel
+    return None
+
+
+def _extract_event_end_time(event_context: dict[str, Any], raw_event: dict[str, Any]) -> str | None:
+    for field in (
+        "endDate",
+        "end_date",
+        "endTime",
+        "end_time",
+        "endTimestamp",
+        "end_timestamp",
+    ):
+        event_value = _string_or_none(event_context.get(field))
+        if event_value is not None:
+            return event_value
+        raw_value = _string_or_none(raw_event.get(field))
+        if raw_value is not None:
+            return raw_value
+    return None
+
+
+def _extract_outcome_name(raw_market: dict[str, Any]) -> str | None:
+    for field in ("outcome_name", "outcomeName", "outcome", "shortName", "groupItemTitle"):
+        value = _string_or_none(raw_market.get(field))
+        if value is not None:
+            return value
+
+    outcomes = _parse_string_list(raw_market.get("outcomes"))
+    if outcomes:
+        return outcomes[0]
+
+    outcome_tokens = raw_market.get("outcomeTokens")
+    if isinstance(outcome_tokens, list):
+        for token in outcome_tokens:
+            if not isinstance(token, dict):
+                continue
+            for field in ("outcome", "title", "name", "label"):
+                value = _string_or_none(token.get(field))
+                if value is not None:
+                    return value
+    return None
+
+
+def _extract_last_price(raw_market: dict[str, Any]) -> float | None:
+    for field in (
+        "lastTradePrice",
+        "last_trade_price",
+        "lastPrice",
+        "last_price",
+        "price",
+    ):
+        value = _to_float(raw_market.get(field))
+        if value is not None:
+            return value
     return None
 
 

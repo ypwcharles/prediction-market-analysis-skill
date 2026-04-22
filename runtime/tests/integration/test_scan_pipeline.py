@@ -24,7 +24,12 @@ def test_scan_pipeline_prefilters_and_coverage_accounting():
     assert outcome.coverage.total_events == 2
     assert outcome.coverage.total_markets == 4
     assert outcome.coverage.total_candidates == 4
+    assert outcome.coverage.shortlisted_candidates == 2
     assert outcome.coverage.tradable_candidates == 1
+    assert outcome.coverage.missing_deadline_candidates == 4
+    assert outcome.coverage.missing_category_candidates == 4
+    assert outcome.coverage.missing_outcome_candidates == 4
+    assert outcome.coverage.missing_family_context_candidates == 1
     assert outcome.coverage.rejected_low_liquidity == 1
     assert outcome.coverage.rejected_duplicate == 1
     assert outcome.coverage.degraded_books == 1
@@ -34,6 +39,11 @@ def test_scan_pipeline_prefilters_and_coverage_accounting():
     assert [candidate.market_id for candidate in outcome.degraded] == ["mkt-degraded"]
     assert outcome.tradable[0].condition_id == "cond-election-a"
     assert outcome.degraded[0].condition_id == "cond-fed-may"
+    assert outcome.tradable[0].best_bid_cents == 49.0
+    assert outcome.tradable[0].best_ask_cents == 51.0
+    assert outcome.tradable[0].mid_cents == 50.0
+    assert outcome.tradable[0].last_price_cents == 51.5
+    assert outcome.tradable[0].family_summary.sibling_count == 2
     assert (
         outcome.tradable[0].expression_key
         == "event-election::will candidate a win the 2026 election?"
@@ -107,6 +117,17 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     assert result.alert_seeds[1].evidence_seeds == (
         {"source": "news", "url": "https://example.com/news"},
     )
+    assert result.alert_seeds[0].event_title == "2026 Live Election"
+    assert result.alert_seeds[0].event_category == "Politics"
+    assert result.alert_seeds[0].event_end_time == "2026-11-04T05:00:00Z"
+    assert result.alert_seeds[0].outcome_name == "Candidate A"
+    assert result.alert_seeds[0].best_bid_cents == 49.0
+    assert result.alert_seeds[0].best_ask_cents == 51.0
+    assert result.alert_seeds[0].mid_cents == 50.0
+    assert result.alert_seeds[0].last_price_cents == 50.5
+    assert result.alert_seeds[0].family_summary.sibling_count == 1
+    assert result.alert_seeds[0].ranking_summary["supported_runtime_domain"] is True
+    assert result.alert_seeds[0].ranking_summary["family_sibling_count"] == 1
 
     conn = connect_db(paths.db_path)
     rows = conn.execute(
@@ -124,12 +145,34 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     ]
     assert rows[0]["dedupe_key"].startswith("scanner-seed::")
     run_row = conn.execute(
-        "SELECT scanned_events, scanned_contracts FROM runs WHERE id = ?",
+        """
+        SELECT
+            scanned_events,
+            scanned_contracts,
+            shortlisted_candidates,
+            retrieved_shortlist_candidates,
+            promoted_seed_count,
+            missing_deadline_candidates,
+            missing_category_candidates,
+            missing_outcome_candidates,
+            missing_family_context_candidates,
+            rejection_reasons_json
+        FROM runs
+        WHERE id = ?
+        """,
         [result.run_id],
     ).fetchone()
     assert dict(run_row) == {
-        "scanned_events": result.outcome.coverage.total_markets,
+        "scanned_events": result.outcome.coverage.total_events,
         "scanned_contracts": result.outcome.coverage.total_candidates,
+        "shortlisted_candidates": 2,
+        "retrieved_shortlist_candidates": 0,
+        "promoted_seed_count": 2,
+        "missing_deadline_candidates": 0,
+        "missing_category_candidates": 0,
+        "missing_outcome_candidates": 0,
+        "missing_family_context_candidates": 0,
+        "rejection_reasons_json": "[]",
     }
 
 
@@ -236,4 +279,57 @@ def test_run_scan_caps_judgment_candidates_by_priority(monkeypatch, tmp_path):
     assert len(result.alert_seeds) == 1
     assert result.alert_seeds[0].market_id == "market-high"
 
+    conn = connect_db(paths.db_path)
+    run_row = conn.execute(
+        """
+        SELECT shortlisted_candidates, promoted_seed_count
+        FROM runs
+        WHERE id = ?
+        """,
+        [result.run_id],
+    ).fetchone()
+    assert dict(run_row) == {
+        "shortlisted_candidates": 2,
+        "promoted_seed_count": 1,
+    }
+
     assert result.alert_seeds[0].market_id == "market-high"
+
+
+def test_run_scan_persists_rejection_explanations_for_miss_review(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+
+    result = run_scan(
+        paths,
+        gamma_payload=_read_json("gamma_board.json"),
+        clob_payload=_read_json("clob_books.json"),
+    )
+
+    conn = connect_db(paths.db_path)
+    run_row = conn.execute(
+        "SELECT rejection_reasons_json FROM runs WHERE id = ?",
+        [result.run_id],
+    ).fetchone()
+    persisted = json.loads(run_row["rejection_reasons_json"])
+    assert persisted == [
+        {
+            "condition_id": "cond-election-b",
+            "event_id": "event-election",
+            "event_slug": "election-2026",
+            "market_id": "mkt-low-liq",
+            "market_slug": "candidate-b-wins",
+            "question": "Will Candidate B win the 2026 election?",
+            "reason": "low_liquidity",
+        },
+        {
+            "condition_id": "cond-election-a-alt",
+            "event_id": "event-election",
+            "event_slug": "election-2026",
+            "market_id": "mkt-duplicate",
+            "market_slug": "candidate-a-wins-alt",
+            "question": "Will Candidate A win the 2026 election?",
+            "reason": "duplicate_expression",
+        },
+    ]
