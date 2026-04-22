@@ -49,7 +49,49 @@ def test_merge_evidence_keeps_configured_primary_support_when_shortlist_retrieva
     assert enriched.strict_allowed is True
 
 
-def _seed() -> AlertSeed:
+def test_merge_evidence_keeps_seeded_items_ahead_of_configured_and_retrieved_items() -> None:
+    configured = tuple(
+        _evidence_item(
+            source_id=f"configured-{index}",
+            source_kind="news",
+            url=f"https://news.example.test/configured-{index}",
+            claim=f"Configured evidence {index}.",
+            tier="primary",
+        )
+        for index in range(4)
+    )
+    retrieved = tuple(
+        _evidence_item(
+            source_id=f"retrieved-{index}",
+            source_kind="x",
+            url=f"https://x.com/example/status/{index}",
+            claim=f"Retrieved evidence {index}.",
+            tier="supplementary",
+        )
+        for index in range(4)
+    )
+    seed = _seed(
+        evidence_seeds=(
+            {
+                "source_id": "seeded-evidence",
+                "source_kind": "news",
+                "url": "https://seed.example.test/1",
+                "claim_snippet": "Operator seeded evidence.",
+                "tier": "primary",
+            },
+        )
+    )
+
+    merged = _merge_evidence(seed, configured, retrieved_items=retrieved)
+
+    assert [item.source_id for item in merged[:3]] == [
+        "seeded-evidence",
+        "configured-0",
+        "configured-1",
+    ]
+
+
+def _seed(*, evidence_seeds: tuple[dict[str, object], ...] = ()) -> AlertSeed:
     return AlertSeed(
         id="alert-1",
         run_id="run-1",
@@ -102,7 +144,7 @@ def _seed() -> AlertSeed:
             "missing_family_context": False,
         },
         judgment_seed=None,
-        evidence_seeds=(),
+        evidence_seeds=evidence_seeds,
     )
 
 

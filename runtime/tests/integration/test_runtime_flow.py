@@ -8,7 +8,9 @@ from polymarket_alert_bot.cli import main
 from polymarket_alert_bot.config.settings import ensure_runtime_dirs, load_runtime_paths
 from polymarket_alert_bot.monitor.position_sync import MonitorOutcome
 from polymarket_alert_bot.runtime_flow import execute_monitor_flow
+from polymarket_alert_bot.scanner.board_scan import run_scan as board_run_scan
 from polymarket_alert_bot.scanner.clob_client import BookSnapshot, degraded_snapshot
+from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
 from polymarket_alert_bot.sources.shortlist_retrieval import ShortlistRetrievalResult
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
@@ -840,6 +842,160 @@ def test_scan_command_falls_back_to_lexical_bundle_when_semantic_relevance_fails
     ).fetchone()
     assert run_row["status"] == "degraded"
     assert "semantic_relevance_runner_failed" in run_row["degraded_reason"]
+
+
+def test_scan_command_semantic_relevance_keeps_seeded_evidence_within_max_item_cap(
+    tmp_path, monkeypatch
+):
+    data_dir = tmp_path / ".runtime-data"
+    payload_log = tmp_path / "semantic-seeded-log.jsonl"
+    news_feed = tmp_path / "seeded-news-feed.json"
+    news_feed.write_text(
+        json.dumps(
+            [
+                {
+                    "source_id": "news-1",
+                    "url": "https://news.example.test/1",
+                    "claim_snippet": "Candidate A still has no certified result.",
+                    "tier": "primary",
+                },
+                {
+                    "source_id": "news-2",
+                    "url": "https://news.example.test/2",
+                    "claim_snippet": "Candidate A recount speculation continues.",
+                    "tier": "primary",
+                },
+                {
+                    "source_id": "news-3",
+                    "url": "https://news.example.test/3",
+                    "claim_snippet": "Election desk says certification is still pending for Candidate A.",
+                    "tier": "primary",
+                },
+                {
+                    "source_id": "news-4",
+                    "url": "https://news.example.test/4",
+                    "claim_snippet": "Candidate A legal challenge remains unresolved.",
+                    "tier": "primary",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID", "-100123456")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_SCAN_MAX_JUDGMENT_CANDIDATES", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_NEWS_FEED_URL", str(news_feed))
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH", raising=False)
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_X_FEED_URL", raising=False)
+    monkeypatch.delenv("POLYMARKET_ALERT_BOT_X_SAMPLES_PATH", raising=False)
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_ENABLED", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_MAX_ITEMS", "4")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys;"
+                    "payload=json.load(sys.stdin);"
+                    "source_ids=[item['source_id'] for item in payload['context']['evidence']];"
+                    "json.dump({'kept_source_ids':source_ids},sys.stdout)"
+                ),
+            ]
+        ),
+    )
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys,pathlib;"
+                    "payload=json.load(sys.stdin);"
+                    f"log_path=pathlib.Path({str(payload_log)!r});"
+                    "handle=log_path.open('a',encoding='utf-8');"
+                    "handle.write(json.dumps(payload['context']['evidence'])+'\\n');"
+                    "handle.close();"
+                    "json.dump({"
+                    "'alert_kind':'research',"
+                    "'cluster_action':'create',"
+                    "'ttl_hours':6,"
+                    "'summary':'semantic seeded evidence check',"
+                    "'watch_item':'keep watching',"
+                    "'citations':[],"
+                    "'triggers':[],"
+                    "'archive_payload':{'summary':'semantic seeded evidence check'}"
+                    "},sys.stdout)"
+                ),
+            ]
+        ),
+    )
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_book(token_id: str) -> BookSnapshot:
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.49,
+            best_ask=0.51,
+            spread_bps=400.0,
+            slippage_bps=200.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    def _run_scan_with_seeded_evidence(paths, *, max_judgment_candidates):
+        return board_run_scan(
+            paths,
+            max_judgment_candidates=max_judgment_candidates,
+            evidence_seed_inputs={
+                "cond-live-a": [
+                    {
+                        "source_id": "seeded-evidence",
+                        "source_kind": "news",
+                        "url": "https://seed.example.test/1",
+                        "claim_snippet": "Operator seeded Candidate A evidence.",
+                        "tier": "primary",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+    monkeypatch.setattr("polymarket_alert_bot.flows.scan.run_scan", _run_scan_with_seeded_evidence)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.flows.scan.retrieve_shortlist_evidence",
+        lambda seed, config, registry: ShortlistRetrievalResult(
+            items=tuple(
+                EvidenceItem(
+                    source_id=f"retrieved-{index}",
+                    source_kind="x",
+                    fetched_at=f"2026-04-22T01:1{index}:00Z",
+                    url=f"https://x.com/example/status/{index}",
+                    claim_snippet=f"Candidate A market chatter update {index}.",
+                    tier="supplementary",
+                )
+                for index in range(4)
+            ),
+            degraded_reasons=(),
+        ),
+    )
+
+    assert main(["scan"]) == 0
+
+    evidence_rows = [
+        json.loads(line) for line in payload_log.read_text(encoding="utf-8").splitlines() if line
+    ]
+    assert len(evidence_rows) == 1
+    assert "seeded-evidence" in {item["source_id"] for item in evidence_rows[0]}
 
 
 def test_scan_command_degrades_when_configured_evidence_feed_fails(tmp_path, monkeypatch):

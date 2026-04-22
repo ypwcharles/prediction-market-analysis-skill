@@ -290,7 +290,10 @@ def _build_structural_flags(
         if context.outcome_template_key
         and context.outcome_template_key == focus.outcome_template_key
     )
-    if len(outcome_group) >= 2:
+    distinct_outcomes = {
+        context.normalized_outcome for context in outcome_group if context.normalized_outcome
+    }
+    if len(outcome_group) >= 2 and len(distinct_outcomes) >= 2:
         surface_groups.add("partition")
         peer_market_ids.update(
             context.summary.market_id
@@ -324,12 +327,6 @@ def _build_structural_flags(
         temporal_chain = tuple(
             sorted(temporal_group, key=lambda item: (item.time_rank, item.summary.market_id))
         )
-        surface_groups.add("temporal")
-        peer_market_ids.update(
-            context.summary.market_id
-            for context in temporal_chain
-            if context.summary.market_id != focus_market_id
-        )
         focus_index = next(
             (
                 index
@@ -341,20 +338,28 @@ def _build_structural_flags(
         if focus_index is not None and focus.summary.last_price_cents is not None:
             if focus_index > 0:
                 earlier = temporal_chain[focus_index - 1]
-                _compare_adjacent_buckets(
-                    earlier=earlier,
-                    later=focus,
-                    add_flag=add_flag,
-                    focus_is_later=True,
-                )
+                if earlier.time_rank is not None and focus.time_rank is not None:
+                    if earlier.time_rank < focus.time_rank:
+                        surface_groups.add("temporal")
+                        peer_market_ids.add(earlier.summary.market_id)
+                        _compare_adjacent_buckets(
+                            earlier=earlier,
+                            later=focus,
+                            add_flag=add_flag,
+                            focus_is_later=True,
+                        )
             if focus_index < len(temporal_chain) - 1:
                 later = temporal_chain[focus_index + 1]
-                _compare_adjacent_buckets(
-                    earlier=focus,
-                    later=later,
-                    add_flag=add_flag,
-                    focus_is_later=False,
-                )
+                if focus.time_rank is not None and later.time_rank is not None:
+                    if focus.time_rank < later.time_rank:
+                        surface_groups.add("temporal")
+                        peer_market_ids.add(later.summary.market_id)
+                        _compare_adjacent_buckets(
+                            earlier=focus,
+                            later=later,
+                            add_flag=add_flag,
+                            focus_is_later=False,
+                        )
 
     for peer in contexts:
         if peer.summary.market_id == focus_market_id:
@@ -385,6 +390,8 @@ def _compare_adjacent_buckets(
     add_flag,
     focus_is_later: bool,
 ) -> None:
+    if earlier.time_rank is None or later.time_rank is None or earlier.time_rank >= later.time_rank:
+        return
     if earlier.summary.last_price_cents is None or later.summary.last_price_cents is None:
         return
     price_gap = round(
