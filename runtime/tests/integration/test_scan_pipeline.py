@@ -84,6 +84,7 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     )
 
     assert result.outcome.coverage.total_events == 1
+    assert result.outcome.coverage.total_markets == 2
     assert result.outcome.coverage.total_candidates == 2
     assert [seed.market_id for seed in result.alert_seeds] == [
         "mkt-live-tradable",
@@ -122,6 +123,14 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
         ("scanner_seed", "mkt-live-tradable", "cond-live-a", "seeded"),
     ]
     assert rows[0]["dedupe_key"].startswith("scanner-seed::")
+    run_row = conn.execute(
+        "SELECT scanned_events, scanned_contracts FROM runs WHERE id = ?",
+        [result.run_id],
+    ).fetchone()
+    assert dict(run_row) == {
+        "scanned_events": result.outcome.coverage.total_markets,
+        "scanned_contracts": result.outcome.coverage.total_candidates,
+    }
 
 
 def test_run_scan_live_uses_runtime_config_urls_and_limit(monkeypatch, tmp_path):

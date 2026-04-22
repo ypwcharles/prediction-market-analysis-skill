@@ -55,7 +55,8 @@ def fetch_events(
 
 
 def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
+    normalized_by_event_id: dict[str, dict[str, Any]] = {}
+    normalized_order: list[str] = []
     for raw_event in raw_events:
         if not isinstance(raw_event, dict):
             continue
@@ -92,12 +93,36 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
         if not isinstance(raw_markets, list):
             continue
 
-        normalized_markets: list[dict[str, Any]] = []
+        normalized_event = normalized_by_event_id.get(event_id)
+        if normalized_event is None:
+            normalized_event = {
+                "id": event_id,
+                "slug": event_slug,
+                "title": event_title,
+                "rules_text": event_rules_text,
+                "markets": [],
+            }
+            normalized_by_event_id[event_id] = normalized_event
+            normalized_order.append(event_id)
+        else:
+            normalized_event["rules_text"] = _merge_rules_text(
+                normalized_event.get("rules_text"), event_rules_text
+            )
+            if not normalized_event.get("slug") and event_slug is not None:
+                normalized_event["slug"] = event_slug
+            if not normalized_event.get("title") and event_title is not None:
+                normalized_event["title"] = event_title
+
+        existing_market_ids = {
+            market.get("id")
+            for market in normalized_event["markets"]
+            if isinstance(market, dict) and market.get("id") is not None
+        }
         for raw_market in raw_markets:
             if not isinstance(raw_market, dict):
                 continue
             market_id = _string_or_none(raw_market.get("id"))
-            if market_id is None:
+            if market_id is None or market_id in existing_market_ids:
                 continue
             token_id = _extract_token_id(raw_market)
             condition_id = _extract_condition_id(raw_market)
@@ -119,7 +144,7 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             )
             rules_text = _merge_rules_text(event_rules_text, market_rules_text)
 
-            normalized_markets.append(
+            normalized_event["markets"].append(
                 {
                     "id": market_id,
                     "slug": market_slug,
@@ -132,19 +157,13 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                     "rules_text": rules_text,
                 }
             )
+            existing_market_ids.add(market_id)
 
-        if not normalized_markets:
-            continue
-        normalized.append(
-            {
-                "id": event_id,
-                "slug": event_slug,
-                "title": event_title,
-                "rules_text": event_rules_text,
-                "markets": normalized_markets,
-            }
-        )
-    return normalized
+    return [
+        normalized_by_event_id[event_id]
+        for event_id in normalized_order
+        if normalized_by_event_id[event_id].get("markets")
+    ]
 
 
 def _extract_token_id(raw_market: dict[str, Any]) -> str | None:

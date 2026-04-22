@@ -134,7 +134,7 @@ def run_scan(
             "started_at": timestamp,
             "finished_at": timestamp,
             "degraded_reason": degraded_reason,
-            "scanned_events": outcome.coverage.total_events,
+            "scanned_events": outcome.coverage.total_markets,
             "scanned_contracts": outcome.coverage.total_candidates,
             "strict_count": len(outcome.tradable),
             "research_count": len(outcome.degraded),

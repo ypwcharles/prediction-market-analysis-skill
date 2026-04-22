@@ -326,15 +326,37 @@ def _persisted_trigger_defaults(trigger: Trigger) -> dict[str, object]:
 
 
 def _persisted_trigger_threshold_value(trigger: Trigger) -> str:
+    if trigger.threshold_value not in (None, ""):
+        return str(trigger.threshold_value)
     if trigger.threshold not in (None, ""):
         return str(trigger.threshold)
+    if trigger.metadata.get("threshold_value") not in (None, ""):
+        return str(trigger.metadata["threshold_value"])
     trigger_type = str(trigger.trigger_type or trigger.kind or "").strip().lower()
     if trigger_type == "market_data_recheck":
         return "quotes_available"
     return str(trigger.condition)
 
 
+def _persisted_trigger_threshold_kind(trigger: Trigger) -> str:
+    if trigger.threshold_kind not in (None, ""):
+        return str(trigger.threshold_kind)
+    if trigger.metadata.get("threshold_kind") not in (None, ""):
+        return str(trigger.metadata["threshold_kind"])
+    return str(_persisted_trigger_defaults(trigger)["threshold_kind"])
+
+
+def _persisted_trigger_comparison(trigger: Trigger) -> str:
+    if trigger.comparison not in (None, ""):
+        return str(trigger.comparison)
+    if trigger.metadata.get("comparison") not in (None, ""):
+        return str(trigger.metadata["comparison"])
+    return str(_persisted_trigger_defaults(trigger)["comparison"])
+
+
 def _persisted_trigger_requires_recheck(trigger: Trigger) -> bool:
+    if trigger.requires_llm_recheck is not None:
+        return bool(trigger.requires_llm_recheck)
     if "requires_llm_recheck" in trigger.metadata:
         return bool(trigger.metadata["requires_llm_recheck"])
     return bool(_persisted_trigger_defaults(trigger)["requires_llm_recheck"])
@@ -358,10 +380,8 @@ def _replace_triggers(
                 "thesis_cluster_id": thesis_cluster_id,
                 "alert_id": alert_id,
                 "trigger_type": trigger.trigger_type or trigger.kind,
-                "threshold_kind": trigger.metadata.get("threshold_kind")
-                or _persisted_trigger_defaults(trigger)["threshold_kind"],
-                "comparison": trigger.metadata.get("comparison")
-                or _persisted_trigger_defaults(trigger)["comparison"],
+                "threshold_kind": _persisted_trigger_threshold_kind(trigger),
+                "comparison": _persisted_trigger_comparison(trigger),
                 "threshold_value": _persisted_trigger_threshold_value(trigger),
                 "suggested_action": trigger.suggested_action or "Review",
                 "requires_llm_recheck": 1 if _persisted_trigger_requires_recheck(trigger) else 0,
