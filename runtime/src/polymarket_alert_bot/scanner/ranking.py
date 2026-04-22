@@ -39,9 +39,9 @@ class CandidateRankingSummary:
         spread_penalty = self.spread_bps if self.spread_bps is not None else 1_000_000.0
         return (
             1 if self.is_degraded else 0,
+            0 if self.supported_runtime_domain else 1,
             -self.family_structural_signal_score,
             -self.family_structural_flag_count,
-            0 if self.supported_runtime_domain else 1,
             self.deadline_rank,
             -self.family_price_surface_depth,
             -self.family_sibling_count,

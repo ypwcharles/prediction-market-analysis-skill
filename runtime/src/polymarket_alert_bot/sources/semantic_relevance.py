@@ -133,7 +133,6 @@ class SemanticRelevanceAdapter:
             )
 
         limited_items = lexical_items[: self.max_items]
-        remainder = lexical_items[self.max_items :]
         payload = self.build_payload(seed=seed, evidence_items=limited_items)
 
         raw: dict[str, Any] | str
@@ -166,8 +165,6 @@ class SemanticRelevanceAdapter:
             )
 
         filtered_items = _apply_decisions(limited_items, parsed)
-        if remainder:
-            filtered_items = (*filtered_items, *remainder)
         return SemanticRelevanceResult(items=filtered_items)
 
     def build_payload(

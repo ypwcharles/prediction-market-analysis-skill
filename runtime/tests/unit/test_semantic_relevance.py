@@ -189,6 +189,26 @@ def test_semantic_relevance_adapter_matches_nested_source_url_without_source_id(
     assert [item.source_id for item in result.items] == ["wire-a", "wire-c"]
 
 
+def test_semantic_relevance_adapter_does_not_reappend_items_beyond_max_items() -> None:
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=2,
+        runner=lambda payload, timeout: {
+            "kept_source_ids": ["wire-a"],
+            "items": [
+                {"source_id": "wire-a", "stance": "supports"},
+                {"source_id": "wire-b", "keep": False},
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(seed=_seed(), evidence_items=_overflow_evidence_items())
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-a"]
+
+
 def test_semantic_relevance_adapter_falls_back_on_malformed_output() -> None:
     adapter = SemanticRelevanceAdapter(
         enabled=True,
@@ -242,6 +262,28 @@ def _evidence_items() -> tuple[EvidenceItem, ...]:
             fetched_at="2026-04-22T01:10:00Z",
             url="https://x.com/example/status/1",
             claim_snippet="Random sports rumor.",
+            tier="supplementary",
+        ),
+    )
+
+
+def _overflow_evidence_items() -> tuple[EvidenceItem, ...]:
+    return (
+        *_evidence_items(),
+        EvidenceItem(
+            source_id="wire-d",
+            source_kind="news",
+            fetched_at="2026-04-22T01:12:00Z",
+            url="https://news.example.test/d",
+            claim_snippet="Overflow evidence should not bypass semantic gating.",
+            tier="primary",
+        ),
+        EvidenceItem(
+            source_id="wire-e",
+            source_kind="x",
+            fetched_at="2026-04-22T01:13:00Z",
+            url="https://x.com/example/status/2",
+            claim_snippet="Overflow x evidence should not bypass semantic gating.",
             tier="supplementary",
         ),
     )

@@ -84,6 +84,38 @@ def test_select_judgment_candidates_prefers_structural_signal_over_raw_liquidity
     assert [candidate.market_id for candidate in selected] == ["market-structural"]
 
 
+def test_select_judgment_candidates_keeps_supported_domains_ahead_of_unsupported_structural_boost():
+    candidates = (
+        _candidate(
+            market_id="market-supported",
+            question="Will the Fed cut rates by June?",
+            event_end_time="2026-06-01T00:00:00Z",
+            liquidity_usd=6_000.0,
+            sibling_count=1,
+            structural_flag_count=0,
+            structural_signal_score=0,
+        ),
+        _candidate(
+            market_id="market-unsupported-structural",
+            question="Will Team A cover the spread this weekend?",
+            event_end_time="2026-06-01T00:00:00Z",
+            event_title="Regional Sports Weekend",
+            event_category="Sports",
+            liquidity_usd=6_000.0,
+            sibling_count=3,
+            surface_group_count=1,
+            price_surface_depth=3,
+            structural_flag_count=3,
+            structural_signal_score=8,
+            dominance_count=1,
+        ),
+    )
+
+    selected = select_judgment_candidates(candidates, max_candidates=1)
+
+    assert [candidate.market_id for candidate in selected] == ["market-supported"]
+
+
 def test_build_ranking_summary_exposes_missing_metadata_without_dropping_candidate():
     candidate = _candidate(
         market_id="market-metadata-thin",
