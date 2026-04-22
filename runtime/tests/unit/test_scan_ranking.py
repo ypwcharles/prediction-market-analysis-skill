@@ -183,7 +183,9 @@ def _candidate(
             sibling_count=sibling_count,
             sibling_markets=(),
             surface_group_count=surface_group_count,
-            price_surface_depth=price_surface_depth if price_surface_depth is not None else sibling_count,
+            price_surface_depth=price_surface_depth
+            if price_surface_depth is not None
+            else sibling_count,
             structural_flag_count=structural_flag_count,
             structural_signal_score=structural_signal_score,
             dominance_count=dominance_count,

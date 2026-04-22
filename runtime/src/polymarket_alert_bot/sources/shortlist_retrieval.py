@@ -74,6 +74,46 @@ def retrieve_shortlist_evidence(
     )
 
 
+def filter_seed_evidence_items(
+    seed: AlertSeed,
+    evidence_items: Iterable[EvidenceItem],
+) -> tuple[EvidenceItem, ...]:
+    phrases, tokens = _build_query_terms(seed)
+    if not phrases and not tokens:
+        return tuple(_dedupe_items(evidence_items))
+
+    scored: list[tuple[int, EvidenceItem]] = []
+    for item in evidence_items:
+        haystack = _normalize_text(
+            _row_text(
+                {
+                    "source_id": item.source_id,
+                    "url": item.url,
+                    "claim_snippet": item.claim_snippet,
+                }
+            )
+        )
+        if not haystack:
+            continue
+        phrase_hits = sum(1 for phrase in phrases if phrase in haystack)
+        token_hits = sum(
+            1 for token in tokens if re.search(rf"\b{re.escape(token)}\b", haystack) is not None
+        )
+        score = phrase_hits * 3 + token_hits
+        if phrase_hits == 0 and token_hits < 2:
+            continue
+        scored.append((score, item))
+
+    scored.sort(
+        key=lambda item: (
+            -item[0],
+            -_freshness_rank(item[1].fetched_at),
+            item[1].source_id,
+        )
+    )
+    return tuple(_dedupe_items(item for _, item in scored[:MAX_ITEMS_PER_SOURCE]))
+
+
 def _build_query_terms(seed: AlertSeed) -> tuple[tuple[str, ...], tuple[str, ...]]:
     raw_phrases = [
         seed.event_title,

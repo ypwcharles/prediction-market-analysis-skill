@@ -33,7 +33,10 @@ from polymarket_alert_bot.judgment.result_parser import ParsedJudgment
 from polymarket_alert_bot.judgment.skill_adapter import SkillAdapter
 from polymarket_alert_bot.scanner.board_scan import AlertSeed, run_scan
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem, enrich_evidence
-from polymarket_alert_bot.sources.shortlist_retrieval import retrieve_shortlist_evidence
+from polymarket_alert_bot.sources.shortlist_retrieval import (
+    filter_seed_evidence_items,
+    retrieve_shortlist_evidence,
+)
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
@@ -83,10 +86,12 @@ def execute_scan_flow(
     for seed in scan_result.alert_seeds:
         seed_now = _now_iso()
         existing_alert = repository.get_alert(seed.id)
+        seed_configured_evidence = configured_evidence
         retrieval_result = retrieve_shortlist_evidence(seed, config, registry=registry)
         degraded_reasons.extend(retrieval_result.degraded_reasons)
         if retrieval_result.items:
             retrieved_shortlist_candidates += 1
+            seed_configured_evidence = filter_seed_evidence_items(seed, configured_evidence)
         if retrieval_result.degraded_reasons:
             retrieval_degraded = True
         seed_evidence_degraded = evidence_degraded or bool(retrieval_result.degraded_reasons)
@@ -94,7 +99,7 @@ def execute_scan_flow(
             skill=skill,
             conn=conn,
             seed=seed,
-            configured_evidence=configured_evidence,
+            configured_evidence=seed_configured_evidence,
             retrieved_evidence=retrieval_result.items,
             registry=registry,
         )
@@ -103,7 +108,7 @@ def execute_scan_flow(
             seed,
             strict_allowed=_is_strict_allowed(
                 seed,
-                configured_evidence,
+                seed_configured_evidence,
                 registry,
                 retrieved_evidence=retrieval_result.items,
             ),

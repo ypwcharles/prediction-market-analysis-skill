@@ -142,13 +142,20 @@ def build_family_summary(
 ) -> CandidateFamilySummary:
     raw_markets = event.get("markets")
     markets = raw_markets if isinstance(raw_markets, list) else []
-    contexts = tuple(
-        _build_market_context(raw_market, event_end_time=_optional_str(event.get("end_time")))
-        for raw_market in markets
-        if isinstance(raw_market, Mapping)
-    )
-    contexts = tuple(context for context in contexts if context is not None)
-    siblings = [context.summary for context in contexts if context.summary.market_id != focus_market_id]
+    contexts_list: list[_MarketContext] = []
+    for raw_market in markets:
+        if not isinstance(raw_market, Mapping):
+            continue
+        context = _build_market_context(
+            raw_market,
+            event_end_time=_optional_str(event.get("end_time")),
+        )
+        if context is not None:
+            contexts_list.append(context)
+    contexts = tuple(contexts_list)
+    siblings = [
+        context.summary for context in contexts if context.summary.market_id != focus_market_id
+    ]
     siblings.sort(key=lambda item: (-(item.liquidity_usd or 0.0), item.market_id))
     structural_flags, surface_groups, peer_market_ids = _build_structural_flags(
         contexts,
@@ -263,7 +270,9 @@ def _build_structural_flags(
     surface_groups: set[str] = set()
     peer_market_ids: set[str] = set()
 
-    def add_flag(flag: FamilyStructuralFlag, *, surface_group: str, peer_market_id: str | None) -> None:
+    def add_flag(
+        flag: FamilyStructuralFlag, *, surface_group: str, peer_market_id: str | None
+    ) -> None:
         if len(flags) >= max(flag_limit, 0):
             return
         key = (flag.flag_type, peer_market_id)
@@ -289,7 +298,9 @@ def _build_structural_flags(
             if context.summary.market_id != focus_market_id
         )
         if all(context.summary.last_price_cents is not None for context in outcome_group):
-            partition_sum = sum(context.summary.last_price_cents or 0.0 for context in outcome_group)
+            partition_sum = sum(
+                context.summary.last_price_cents or 0.0 for context in outcome_group
+            )
             if partition_sum > 100.0 + PARTITION_TOLERANCE_CENTS:
                 add_flag(
                     FamilyStructuralFlag(
@@ -310,7 +321,9 @@ def _build_structural_flags(
         and context.time_rank is not None
     )
     if len(temporal_group) >= 2:
-        temporal_chain = tuple(sorted(temporal_group, key=lambda item: (item.time_rank, item.summary.market_id)))
+        temporal_chain = tuple(
+            sorted(temporal_group, key=lambda item: (item.time_rank, item.summary.market_id))
+        )
         surface_groups.add("temporal")
         peer_market_ids.update(
             context.summary.market_id
@@ -318,7 +331,11 @@ def _build_structural_flags(
             if context.summary.market_id != focus_market_id
         )
         focus_index = next(
-            (index for index, context in enumerate(temporal_chain) if context.summary.market_id == focus_market_id),
+            (
+                index
+                for index, context in enumerate(temporal_chain)
+                if context.summary.market_id == focus_market_id
+            ),
             None,
         )
         if focus_index is not None and focus.summary.last_price_cents is not None:
@@ -370,7 +387,9 @@ def _compare_adjacent_buckets(
 ) -> None:
     if earlier.summary.last_price_cents is None or later.summary.last_price_cents is None:
         return
-    price_gap = round((later.summary.last_price_cents or 0.0) - (earlier.summary.last_price_cents or 0.0), 4)
+    price_gap = round(
+        (later.summary.last_price_cents or 0.0) - (earlier.summary.last_price_cents or 0.0), 4
+    )
     if focus_is_later and price_gap < -DOMINANCE_TOLERANCE_CENTS:
         add_flag(
             FamilyStructuralFlag(

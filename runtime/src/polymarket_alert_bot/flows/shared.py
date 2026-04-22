@@ -49,9 +49,7 @@ def _merge_evidence(
 ) -> list[EvidenceItem]:
     merged: list[EvidenceItem] = []
     seen: set[tuple[str, str, str]] = set()
-    base_items = tuple(retrieved_items)
-    if not base_items:
-        base_items = tuple(configured_items)
+    base_items = (*configured_items, *retrieved_items)
     for item in base_items:
         key = (item.source_id, item.url, item.claim_snippet)
         if key in seen:
