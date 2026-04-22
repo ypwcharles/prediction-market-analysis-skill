@@ -14,10 +14,13 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             finished_at TEXT,
             degraded_reason TEXT,
             scanned_events INTEGER DEFAULT 0,
+            scanned_families INTEGER DEFAULT 0,
             scanned_contracts INTEGER DEFAULT 0,
             shortlisted_candidates INTEGER DEFAULT 0,
             retrieved_shortlist_candidates INTEGER DEFAULT 0,
             promoted_seed_count INTEGER DEFAULT 0,
+            families_with_structural_flags INTEGER DEFAULT 0,
+            structurally_flagged_candidates INTEGER DEFAULT 0,
             missing_deadline_candidates INTEGER DEFAULT 0,
             missing_category_candidates INTEGER DEFAULT 0,
             missing_outcome_candidates INTEGER DEFAULT 0,
@@ -187,9 +190,12 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "cluster_expressions", "condition_id", "TEXT")
     _ensure_column(conn, "alerts", "condition_id", "TEXT")
     _ensure_column(conn, "feedback", "callback_query_id", "TEXT")
+    _ensure_column(conn, "runs", "scanned_families", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "shortlisted_candidates", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "retrieved_shortlist_candidates", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "promoted_seed_count", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "families_with_structural_flags", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "runs", "structurally_flagged_candidates", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "missing_deadline_candidates", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "missing_category_candidates", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "missing_outcome_candidates", "INTEGER DEFAULT 0")

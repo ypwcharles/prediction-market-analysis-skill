@@ -30,10 +30,13 @@ def render_heartbeat(payload: Mapping[str, Any]) -> str:
     scan_run_id = _resolve(payload, archive_payload, "scan_run_id")
     monitor_run_id = _resolve(payload, archive_payload, "monitor_run_id")
     scanned_events = _resolve(payload, counts, "scanned_events")
+    scanned_families = _resolve(payload, counts, "scanned_families")
     scanned_contracts = _resolve(payload, counts, "scanned_contracts")
     shortlisted_candidates = _resolve(payload, counts, "shortlisted_candidates")
     retrieved_shortlist_candidates = _resolve(payload, counts, "retrieved_shortlist_candidates")
     promoted_seed_count = _resolve(payload, counts, "promoted_seed_count")
+    families_with_structural_flags = _resolve(payload, counts, "families_with_structural_flags")
+    structurally_flagged_candidates = _resolve(payload, counts, "structurally_flagged_candidates")
     strict_count = _resolve(payload, counts, "strict_count")
     research_count = _resolve(payload, counts, "research_count")
     skipped_count = _resolve(payload, counts, "skipped_count")
@@ -53,6 +56,9 @@ def render_heartbeat(payload: Mapping[str, Any]) -> str:
             f"{_as_text(scanned_events)}/{_as_text(scanned_contracts)}/"
             f"{_as_text(shortlisted_candidates)}/{_as_text(retrieved_shortlist_candidates)}/"
             f"{_as_text(promoted_seed_count)}",
+            "families/flagged families/flagged candidates: "
+            f"{_as_text(scanned_families)}/{_as_text(families_with_structural_flags)}/"
+            f"{_as_text(structurally_flagged_candidates)}",
             f"strict/research/skipped: {_as_text(strict_count)}/{_as_text(research_count)}/{_as_text(skipped_count)}",
             f"reason: {_as_text(degraded_reason)}",
         ]

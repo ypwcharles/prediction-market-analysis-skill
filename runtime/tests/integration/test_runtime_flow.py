@@ -388,6 +388,7 @@ def test_scan_command_prefers_shortlist_retrieval_and_passes_rich_snapshot(tmp_p
     assert context["candidate_facts"]["family_summary"]["sibling_markets"][0]["market_id"] == (
         "mkt-live-degraded"
     )
+    assert context["candidate_facts"]["family_summary"]["structural_flag_count"] == 0
     assert context["executable_fields"]["best_bid_cents"] == 49.0
     assert context["executable_fields"]["best_ask_cents"] == 51.0
     assert context["executable_fields"]["mid_cents"] == 50.0
@@ -395,6 +396,7 @@ def test_scan_command_prefers_shortlist_retrieval_and_passes_rich_snapshot(tmp_p
     assert context["executable_fields"]["max_entry_cents"] == 51.0
     assert context["candidate_facts"]["ranking_summary"]["supported_runtime_domain"] is True
     assert context["candidate_facts"]["ranking_summary"]["family_sibling_count"] == 1
+    assert context["candidate_facts"]["ranking_summary"]["family_structural_signal_score"] == 0
     evidence_ids = {item["source_id"] for item in context["evidence"]}
     assert {"news-candidate-a-1", "news-candidate-a-2", "x-candidate-a"} <= evidence_ids
     assert "news-unrelated" not in evidence_ids
@@ -750,6 +752,7 @@ def test_scan_command_marks_heartbeat_degraded_when_shortlist_retrieval_fails(
     heartbeat_text = Path(heartbeat_row["archive_path"]).read_text(encoding="utf-8")
     assert heartbeat_text.startswith("[DEGRADED]")
     assert "events/contracts/shortlist/retrieved/promoted: 1/2/2/0/1" in heartbeat_text
+    assert "families/flagged families/flagged candidates: 1/0/0" in heartbeat_text
     assert "shortlist_x_failed:TimeoutError" in heartbeat_text
 
 
