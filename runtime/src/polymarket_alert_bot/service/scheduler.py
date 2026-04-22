@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Callable
 
+from polymarket_alert_bot.storage.locks import LockHeldError
+
 Runner = Callable[[], Any]
 
 
@@ -14,6 +16,8 @@ class ScheduledJob:
     interval_seconds: float
     runner: Runner
     run_immediately: bool = False
+    startup_retry_attempts: int = 0
+    startup_retry_delay_seconds: float = 0.0
 
 
 class RuntimeServiceScheduler:
@@ -28,6 +32,8 @@ class RuntimeServiceScheduler:
             job.name: {
                 "interval_seconds": job.interval_seconds,
                 "run_immediately": job.run_immediately,
+                "startup_retry_attempts": job.startup_retry_attempts,
+                "startup_retry_delay_seconds": job.startup_retry_delay_seconds,
                 "run_count": 0,
                 "last_started_at": None,
                 "last_finished_at": None,
@@ -65,7 +71,8 @@ class RuntimeServiceScheduler:
 
     def run_job_now(self, name: str) -> bool:
         job = self._jobs[name]
-        return self._run_job(job)
+        succeeded, _ = self._run_job(job)
+        return succeeded
 
     def snapshot(self) -> dict[str, Any]:
         with self._state_lock:
@@ -78,14 +85,20 @@ class RuntimeServiceScheduler:
 
     def _run_loop(self, job: ScheduledJob) -> None:
         if job.run_immediately:
-            self._run_job(job)
+            succeeded, error = self._run_job(job)
+            retries_remaining = job.startup_retry_attempts
+            while not succeeded and retries_remaining > 0 and isinstance(error, LockHeldError):
+                if self._stop_event.wait(job.startup_retry_delay_seconds):
+                    return
+                succeeded, error = self._run_job(job)
+                retries_remaining -= 1
         while not self._stop_event.wait(job.interval_seconds):
             self._run_job(job)
 
-    def _run_job(self, job: ScheduledJob) -> bool:
+    def _run_job(self, job: ScheduledJob) -> tuple[bool, Exception | None]:
         lock = self._locks[job.name]
         if not lock.acquire(blocking=False):
-            return False
+            return False, None
         started_at = _now_iso()
         with self._state_lock:
             state = self._job_state[job.name]
@@ -98,7 +111,7 @@ class RuntimeServiceScheduler:
             with self._state_lock:
                 state = self._job_state[job.name]
                 state["last_error"] = f"{exc.__class__.__name__}: {exc}"
-            return False
+            return False, exc
         finally:
             finished_at = _now_iso()
             with self._state_lock:
@@ -107,7 +120,7 @@ class RuntimeServiceScheduler:
                 state["last_finished_at"] = finished_at
                 state["run_count"] += 1
             lock.release()
-        return True
+        return True, None
 
 
 def _now_iso() -> str:

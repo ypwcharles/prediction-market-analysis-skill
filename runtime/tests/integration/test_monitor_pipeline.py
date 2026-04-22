@@ -266,11 +266,11 @@ def test_run_monitor_uses_live_orderbook_for_price_triggers(monkeypatch, tmp_pat
             "trg-price",
             "cluster-live",
             "alert-live",
-            "price_threshold",
-            "price_cents",
+            "price_reprice",
+            "price",
             "<=",
             "40",
-            "Scale-in review",
+            "Reprice review",
             0,
             "armed",
             now_iso,
@@ -279,28 +279,228 @@ def test_run_monitor_uses_live_orderbook_for_price_triggers(monkeypatch, tmp_pat
     )
     conn.commit()
 
-    observed_tokens: list[str] = []
+    observed_book_calls: list[str] = []
 
     def _fake_fetch_book(token_id: str, *, url: str = "") -> BookSnapshot:
-        observed_tokens.append(token_id)
+        observed_book_calls.append(token_id)
         return BookSnapshot(
             token_id=token_id,
-            best_bid=0.45,
-            best_ask=0.46,
-            spread_bps=220.0,
-            slippage_bps=110.0,
+            best_bid=0.39,
+            best_ask=0.40,
+            spread_bps=200.0,
+            slippage_bps=100.0,
             is_degraded=False,
             degraded_reason=None,
         )
 
     monkeypatch.setattr(position_sync, "fetch_book", _fake_fetch_book)
+
     outcome = run_monitor(paths, now=now)
 
-    assert observed_tokens == ["token-1"]
+    assert observed_book_calls == ["token-1"]
+    assert len(outcome.fired_actions) == 1
+    assert outcome.fired_actions[0]["trigger_id"] == "trg-price"
+
+
+def test_run_monitor_uses_live_orderbook_for_execution_cost_triggers(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+    conn = connect_db(paths.db_path)
+    apply_migrations(conn)
+    now = datetime(2026, 4, 17, 9, 0, tzinfo=UTC)
+    now_iso = now.isoformat()
+
+    conn.execute(
+        """
+        INSERT INTO runs (
+            id, run_type, status, started_at, finished_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ["run-seed", "scan", "clean", now_iso, now_iso, now_iso],
+    )
+    conn.execute(
+        """
+        INSERT INTO thesis_clusters (
+            id, canonical_name, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        ["cluster-live", "Live thesis", "open", now_iso, now_iso],
+    )
+    conn.execute(
+        """
+        INSERT INTO alerts (
+            id, run_id, thesis_cluster_id, market_id, token_id,
+            alert_kind, delivery_mode, status, dedupe_key, recheck_required_at,
+            spread_bps, slippage_bps, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "alert-live",
+            "run-seed",
+            "cluster-live",
+            "market-1",
+            "token-1",
+            "monitor",
+            "immediate",
+            "active",
+            "dedupe-live",
+            (now + timedelta(hours=2)).isoformat(),
+            800.0,
+            400.0,
+            now_iso,
+        ],
+    )
+    conn.execute(
+        """
+        INSERT INTO triggers (
+            id, thesis_cluster_id, alert_id, trigger_type, threshold_kind,
+            comparison, threshold_value, suggested_action, requires_llm_recheck,
+            state, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "trg-cost",
+            "cluster-live",
+            "alert-live",
+            "price_threshold",
+            "execution_cost",
+            "<=",
+            "200",
+            "Review",
+            1,
+            "armed",
+            now_iso,
+            now_iso,
+        ],
+    )
+    conn.commit()
+
+    observed_book_calls: list[str] = []
+
+    def _fake_fetch_book(token_id: str, *, url: str = "") -> BookSnapshot:
+        observed_book_calls.append(token_id)
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.39,
+            best_ask=0.40,
+            spread_bps=120.0,
+            slippage_bps=60.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    monkeypatch.setattr(position_sync, "fetch_book", _fake_fetch_book)
+
+    outcome = run_monitor(paths, now=now)
+
+    assert observed_book_calls == ["token-1"]
     assert outcome.fired_actions == []
+    assert len(outcome.pending_recheck_actions) == 1
+    assert outcome.pending_recheck_actions[0]["trigger_id"] == "trg-cost"
+    assert outcome.pending_recheck_actions[0]["observation"] == 180.0
+
     trigger_row = conn.execute(
         "SELECT state, last_fired_at FROM triggers WHERE id = ?",
-        ["trg-price"],
+        ["trg-cost"],
+    ).fetchone()
+    assert trigger_row["state"] == "fired"
+    assert trigger_row["last_fired_at"] == now_iso
+
+
+def test_run_monitor_does_not_fire_execution_cost_trigger_on_degraded_live_book(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+    conn = connect_db(paths.db_path)
+    apply_migrations(conn)
+    now = datetime(2026, 4, 17, 9, 0, tzinfo=UTC)
+    now_iso = now.isoformat()
+
+    conn.execute(
+        """
+        INSERT INTO runs (
+            id, run_type, status, started_at, finished_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ["run-seed", "scan", "clean", now_iso, now_iso, now_iso],
+    )
+    conn.execute(
+        """
+        INSERT INTO thesis_clusters (
+            id, canonical_name, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        ["cluster-live", "Live thesis", "open", now_iso, now_iso],
+    )
+    conn.execute(
+        """
+        INSERT INTO alerts (
+            id, run_id, thesis_cluster_id, market_id, token_id,
+            alert_kind, delivery_mode, status, dedupe_key, recheck_required_at,
+            spread_bps, slippage_bps, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "alert-live",
+            "run-seed",
+            "cluster-live",
+            "market-1",
+            "token-1",
+            "monitor",
+            "immediate",
+            "active",
+            "dedupe-live",
+            (now + timedelta(hours=2)).isoformat(),
+            800.0,
+            400.0,
+            now_iso,
+        ],
+    )
+    conn.execute(
+        """
+        INSERT INTO triggers (
+            id, thesis_cluster_id, alert_id, trigger_type, threshold_kind,
+            comparison, threshold_value, suggested_action, requires_llm_recheck,
+            state, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "trg-cost",
+            "cluster-live",
+            "alert-live",
+            "price_threshold",
+            "execution_cost",
+            "<=",
+            "200",
+            "Review",
+            1,
+            "armed",
+            now_iso,
+            now_iso,
+        ],
+    )
+    conn.commit()
+
+    observed_book_calls: list[str] = []
+
+    def _fake_fetch_book(token_id: str, *, url: str = "") -> BookSnapshot:
+        observed_book_calls.append(token_id)
+        return position_sync.degraded_snapshot(token_id, "book_fetch_error")
+
+    monkeypatch.setattr(position_sync, "fetch_book", _fake_fetch_book)
+
+    outcome = run_monitor(paths, now=now)
+
+    assert observed_book_calls == ["token-1"]
+    assert outcome.fired_actions == []
+    assert outcome.pending_recheck_actions == []
+
+    trigger_row = conn.execute(
+        "SELECT state, last_fired_at FROM triggers WHERE id = ?",
+        ["trg-cost"],
     ).fetchone()
     assert trigger_row["state"] == "armed"
     assert trigger_row["last_fired_at"] is None

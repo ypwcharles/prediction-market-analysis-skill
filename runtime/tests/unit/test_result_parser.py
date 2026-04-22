@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -264,6 +265,63 @@ def test_skill_adapter_degrades_when_no_runner_is_configured(
 
     assert parsed.alert_kind == "degraded"
     assert parsed.archive_payload["reason"] == "runner_not_configured"
+
+
+def test_skill_adapter_timeout_cleans_child_processes(tmp_path: Path) -> None:
+    child_file = tmp_path / "child_pid.txt"
+    launcher = tmp_path / "launcher.py"
+    launcher.write_text(
+        "import subprocess, sys, time, pathlib\n"
+        "pid_path = pathlib.Path(sys.argv[1])\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        "pid_path.write_text(str(child.pid))\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    command = [sys.executable, str(launcher), str(child_file)]
+    adapter = SkillAdapter(external_command=command, timeout_seconds=1)
+
+    parsed = adapter.judge({"candidate_facts": {"market_id": "m1"}})
+
+    assert parsed.alert_kind == "degraded"
+    assert parsed.archive_payload["reason"] == "skill_timeout"
+    assert child_file.exists()
+    child_pid = int(child_file.read_text().strip())
+    time.sleep(0.5)
+    assert not Path(f"/proc/{child_pid}").exists()
+
+
+def test_wrapper_runner_timeout_cleans_fake_hermes_descendants(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    child_file = tmp_path / "wrapper_child_pid.txt"
+    fake_hermes = tmp_path / "fake_hermes.py"
+    fake_hermes.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, subprocess, time, pathlib\n"
+        "pid_path = pathlib.Path(os.environ['FAKE_HERMES_CHILD_PID_FILE'])\n"
+        "child = subprocess.Popen(['sleep', '30'])\n"
+        "pid_path.write_text(str(child.pid))\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    fake_hermes.chmod(0o755)
+
+    monkeypatch.setenv("HERMES_RUNTIME_REAL_RUNNER_EXECUTABLE", str(fake_hermes))
+    monkeypatch.setenv("FAKE_HERMES_CHILD_PID_FILE", str(child_file))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_JUDGMENT_TIMEOUT_SECONDS", "1")
+
+    wrapper = Path(__file__).resolve().parents[3] / "scripts" / "hermes_runtime_real_runner.py"
+    adapter = SkillAdapter(external_command=[sys.executable, str(wrapper)], timeout_seconds=1)
+
+    parsed = adapter.judge({"candidate_facts": {"market_id": "m1"}})
+
+    assert parsed.alert_kind == "degraded"
+    assert str(parsed.archive_payload["reason"]).startswith("hermes_timeout:")
+    assert child_file.exists()
+    child_pid = int(child_file.read_text().strip())
+    time.sleep(0.5)
+    assert not Path(f"/proc/{child_pid}").exists()
 
 
 def test_parse_judgment_result_preserves_runtime_alert_fields() -> None:

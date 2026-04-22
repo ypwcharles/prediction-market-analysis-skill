@@ -56,14 +56,20 @@ class TelegramClient:
         self,
         *,
         bot_token: str | None = None,
-        base_url: str = "https://api.telegram.org",
+        base_url: str | None = None,
         timeout_seconds: float = 10.0,
         http_client: httpx.Client | None = None,
         request_fn: TelegramRequestFn | None = None,
     ) -> None:
         self.bot_token = bot_token or os.environ.get("TELEGRAM_BOT_TOKEN")
         self.disabled = _env_flag("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM")
-        self.base_url = base_url.rstrip("/")
+        resolved_base_url = (
+            base_url
+            or os.environ.get("POLYMARKET_ALERT_BOT_TELEGRAM_BASE_URL")
+            or os.environ.get("TELEGRAM_BASE_URL")
+            or "https://api.telegram.org"
+        )
+        self.base_url = resolved_base_url.rstrip("/")
         self._request_fn = request_fn
         self._own_client = request_fn is None and http_client is None
         self._client = (

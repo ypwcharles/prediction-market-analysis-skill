@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from polymarket_alert_bot.delivery.callback_router import (
     CallbackRouter,
     build_feedback_keyboard,
@@ -373,3 +375,12 @@ def test_telegram_client_answer_callback_query_treats_stale_query_as_false() -> 
         text="ack",
     )
     assert answered is False
+
+
+def test_telegram_client_uses_env_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_BASE_URL", "http://127.0.0.1:8081")
+    client = TelegramClient(bot_token="token")
+    try:
+        assert client.base_url == "http://127.0.0.1:8081"
+    finally:
+        client.close()

@@ -125,3 +125,52 @@ def test_evaluate_stored_trigger_supports_market_data_recheck_state_changes() ->
     assert result["requires_llm_recheck"] is False
     assert result["observation"] == "quotes_available"
     assert result["updated_trigger"]["state"] == "fired"
+
+
+def test_price_threshold_with_llm_recheck_stays_mechanical_until_threshold_hits() -> None:
+    now = datetime.now(UTC)
+    trigger = {
+        "id": "trg-5",
+        "trigger_type": "price_threshold",
+        "threshold_kind": "execution_cost",
+        "comparison": "<=",
+        "threshold_value": "200",
+        "requires_llm_recheck": 1,
+        "state": "armed",
+    }
+
+    result = evaluate_stored_trigger(
+        trigger,
+        observations={"execution_cost_bps": 350.0},
+        now=now,
+    )
+
+    assert result["fired"] is False
+    assert result["requires_llm_recheck"] is False
+    assert result["observation"] == 350.0
+    assert result["updated_trigger"]["state"] == "armed"
+
+
+def test_price_threshold_with_llm_recheck_requests_recheck_only_after_threshold_hits() -> None:
+    now = datetime.now(UTC)
+    trigger = {
+        "id": "trg-6",
+        "trigger_type": "price_threshold",
+        "threshold_kind": "execution_cost",
+        "comparison": "<=",
+        "threshold_value": "200",
+        "requires_llm_recheck": 1,
+        "state": "armed",
+    }
+
+    result = evaluate_stored_trigger(
+        trigger,
+        observations={"execution_cost_bps": 150.0},
+        now=now,
+    )
+
+    assert result["fired"] is True
+    assert result["requires_llm_recheck"] is True
+    assert result["observation"] == 150.0
+    assert result["updated_trigger"]["state"] == "fired"
+    assert result["updated_trigger"]["last_fired_at"] == now.isoformat()
