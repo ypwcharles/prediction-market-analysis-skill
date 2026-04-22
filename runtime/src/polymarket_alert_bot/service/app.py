@@ -63,6 +63,8 @@ def create_app(
                 config.scan_interval_seconds,
                 resolved_scan_runner,
                 run_immediately=True,
+                startup_retry_attempts=5,
+                startup_retry_delay_seconds=60.0,
             ),
             ScheduledJob("monitor", config.monitor_interval_seconds, resolved_monitor_runner),
             ScheduledJob("report", config.report_interval_seconds, resolved_report_runner),

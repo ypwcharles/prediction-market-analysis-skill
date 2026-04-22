@@ -57,9 +57,13 @@ def fetch_book(
                 if not isinstance(payload, Mapping):
                     return degraded_snapshot(token_id, "book_malformed")
                 return snapshot_from_book(token_id, payload)
-            except (httpx.HTTPError, ValueError):
+            except httpx.HTTPStatusError:
+                return degraded_snapshot(token_id, "book_fetch_error")
+            except httpx.TransportError:
                 if attempt == 1:
                     return degraded_snapshot(token_id, "book_fetch_error")
+            except ValueError:
+                return degraded_snapshot(token_id, "book_fetch_error")
         return degraded_snapshot(token_id, "book_fetch_error")
     finally:
         if close_client:

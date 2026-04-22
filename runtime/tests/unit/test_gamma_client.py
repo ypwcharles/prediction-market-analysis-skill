@@ -129,6 +129,28 @@ def test_fetch_book_retries_once_on_transient_http_error() -> None:
     assert snapshot.degraded_reason is None
 
 
+def test_fetch_book_does_not_retry_http_status_errors() -> None:
+    client = _FlakyClient(
+        [
+            _FakeResponse({}, raise_http=True),
+            _FakeResponse(
+                {
+                    "bids": [{"price": "0.40"}],
+                    "asks": [{"price": "0.42"}],
+                }
+            ),
+        ]
+    )
+
+    snapshot = fetch_book("token-1", http_client=client, url="https://clob.example.test/book")
+
+    assert client.calls == [
+        ("https://clob.example.test/book", {"token_id": "token-1"}),
+    ]
+    assert snapshot.is_degraded is True
+    assert snapshot.degraded_reason == "book_fetch_error"
+
+
 def test_normalize_events_groups_market_rows_under_one_event() -> None:
     raw_market_payload = [
         {
