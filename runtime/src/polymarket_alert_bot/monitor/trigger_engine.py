@@ -111,11 +111,33 @@ def is_narrative_trigger(trigger: dict[str, Any]) -> bool:
     requires_recheck = bool(trigger.get("requires_llm_recheck"))
     trigger_type = str(trigger.get("trigger_type", "")).strip().lower()
     threshold_kind = str(trigger.get("threshold_kind", "")).strip().lower()
-    if requires_recheck:
-        return True
+    mechanical_threshold_kinds = {
+        "price",
+        "price_cents",
+        "edge",
+        "executable_edge",
+        "executable_edge_cents",
+        "theoretical_edge",
+        "theoretical_edge_cents",
+        "spread",
+        "spread_bps",
+        "slippage",
+        "slippage_bps",
+        "execution_cost",
+        "execution_cost_bps",
+        "position_size",
+        "position_size_shares",
+        "position_state",
+        "position_status",
+        "book_state",
+    }
     if "narrative" in trigger_type:
         return True
-    return threshold_kind in {"narrative", "context", "news", "thesis"}
+    if threshold_kind in {"narrative", "context", "news", "thesis"}:
+        return True
+    if requires_recheck and threshold_kind not in mechanical_threshold_kinds:
+        return True
+    return False
 
 
 def observation_key_for_threshold(threshold_kind: str | None) -> str:
@@ -132,6 +154,8 @@ def observation_key_for_threshold(threshold_kind: str | None) -> str:
         "spread_bps": "spread_bps",
         "slippage": "slippage_bps",
         "slippage_bps": "slippage_bps",
+        "execution_cost": "execution_cost_bps",
+        "execution_cost_bps": "execution_cost_bps",
         "position_size": "position_size_shares",
         "position_size_shares": "position_size_shares",
         "position_state": "position_status",
@@ -175,6 +199,6 @@ def evaluate_stored_trigger(
     return {
         "updated_trigger": updated,
         "fired": fired,
-        "requires_llm_recheck": False,
+        "requires_llm_recheck": fired and bool(baseline.get("requires_llm_recheck")),
         "observation": observation,
     }

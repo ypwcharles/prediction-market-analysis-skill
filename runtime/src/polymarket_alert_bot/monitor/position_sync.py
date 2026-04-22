@@ -43,6 +43,8 @@ _ORDERBOOK_OBSERVATION_THRESHOLD_KINDS = {
     "spread_bps",
     "slippage",
     "slippage_bps",
+    "execution_cost",
+    "execution_cost_bps",
 }
 
 
@@ -313,14 +315,18 @@ def _build_observations(
     live_slippage_bps = (
         None if book_snapshot is None or book_snapshot.is_degraded else book_snapshot.slippage_bps
     )
+    spread_bps = live_spread_bps if live_spread_bps is not None else trigger_row["spread_bps"]
+    slippage_bps = live_slippage_bps if live_slippage_bps is not None else trigger_row["slippage_bps"]
+    execution_cost_bps = None
+    if live_spread_bps is not None and live_slippage_bps is not None:
+        execution_cost_bps = float(live_spread_bps) + float(live_slippage_bps)
     return {
         "price_cents": live_price_cents,
         "executable_edge_cents": trigger_row["executable_edge_cents"],
         "theoretical_edge_cents": trigger_row["theoretical_edge_cents"],
-        "spread_bps": live_spread_bps if live_spread_bps is not None else trigger_row["spread_bps"],
-        "slippage_bps": live_slippage_bps
-        if live_slippage_bps is not None
-        else trigger_row["slippage_bps"],
+        "spread_bps": spread_bps,
+        "slippage_bps": slippage_bps,
+        "execution_cost_bps": execution_cost_bps,
         "position_size_shares": position_row["position_size_shares"] if position_row else None,
         "position_status": position_row["position_status"] if position_row else None,
         "book_state": "quotes_missing"
