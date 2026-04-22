@@ -20,7 +20,7 @@ from polymarket_alert_bot.scanner.family import CandidateFamilySummary
 from polymarket_alert_bot.scanner.gamma_client import fetch_events, normalize_events
 from polymarket_alert_bot.scanner.market_link import build_polymarket_market_url
 from polymarket_alert_bot.scanner.normalizer import ScanCandidate, normalize_candidates
-from polymarket_alert_bot.scanner.ranking import select_judgment_candidates
+from polymarket_alert_bot.scanner.ranking import build_ranking_summary, select_judgment_candidates
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
@@ -89,11 +89,13 @@ class AlertSeed:
     best_bid_cents: float | None
     best_ask_cents: float | None
     mid_cents: float | None
+    last_price_cents: float | None
     spread_bps: float | None
     slippage_bps: float | None
     is_degraded: bool
     degraded_reason: str | None
     family_summary: CandidateFamilySummary
+    ranking_summary: dict[str, Any]
     judgment_seed: dict[str, Any] | None
     evidence_seeds: tuple[dict[str, Any], ...]
 
@@ -388,11 +390,13 @@ def _build_alert_seeds(
                 best_bid_cents=candidate.best_bid_cents,
                 best_ask_cents=candidate.best_ask_cents,
                 mid_cents=candidate.mid_cents,
+                last_price_cents=candidate.last_price_cents,
                 spread_bps=candidate.spread_bps,
                 slippage_bps=candidate.slippage_bps,
                 is_degraded=candidate.is_degraded,
                 degraded_reason=candidate.degraded_reason,
                 family_summary=candidate.family_summary,
+                ranking_summary=build_ranking_summary(candidate).as_dict(),
                 judgment_seed=judgment_seed,
                 evidence_seeds=evidence_seeds,
             )

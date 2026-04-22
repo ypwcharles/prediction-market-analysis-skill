@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from polymarket_alert_bot.scanner.family import CandidateFamilySummary
 from polymarket_alert_bot.scanner.normalizer import ScanCandidate
-from polymarket_alert_bot.scanner.ranking import select_judgment_candidates
+from polymarket_alert_bot.scanner.ranking import build_ranking_summary, select_judgment_candidates
 
 
 def test_select_judgment_candidates_prefers_supported_domain_and_nearer_deadline():
@@ -55,6 +55,24 @@ def test_select_judgment_candidates_prefers_richer_family_context_when_otherwise
     assert [candidate.market_id for candidate in selected] == ["market-rich-family"]
 
 
+def test_build_ranking_summary_exposes_missing_metadata_without_dropping_candidate():
+    candidate = _candidate(
+        market_id="market-metadata-thin",
+        question="Will bitcoin hit $150k in 2026?",
+        event_end_time=None,
+        sibling_count=0,
+        event_category="",
+    )
+
+    summary = build_ranking_summary(candidate)
+
+    assert summary.missing_deadline is True
+    assert summary.missing_category is True
+    assert summary.missing_outcome_name is False
+    assert summary.missing_family_context is True
+    assert summary.as_dict()["deadline_available"] is False
+
+
 def _candidate(
     *,
     market_id: str,
@@ -82,6 +100,7 @@ def _candidate(
         best_bid_cents=48.0,
         best_ask_cents=50.0,
         mid_cents=49.0,
+        last_price_cents=49.5,
         spread_bps=400.0,
         slippage_bps=200.0,
         is_degraded=False,

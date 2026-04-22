@@ -80,6 +80,8 @@ def _build_query_terms(seed: AlertSeed) -> tuple[tuple[str, ...], tuple[str, ...
         seed.question,
         seed.outcome_name,
         seed.event_category,
+        _deadline_phrase(seed.event_end_time),
+        *_family_query_phrases(seed),
         _slug_phrase(seed.event_slug),
         _slug_phrase(seed.market_slug),
     ]
@@ -104,7 +106,7 @@ def _build_query_terms(seed: AlertSeed) -> tuple[tuple[str, ...], tuple[str, ...
             continue
         tokens.append(token)
         seen_tokens.add(token)
-    return tuple(phrases[:6]), tuple(tokens[:10])
+    return tuple(phrases[:8]), tuple(tokens[:12])
 
 
 def _filter_rows(
@@ -178,6 +180,26 @@ def _slug_phrase(value: str | None) -> str | None:
     if not value:
         return None
     return value.replace("-", " ")
+
+
+def _family_query_phrases(seed: AlertSeed) -> tuple[str, ...]:
+    phrases: list[str] = []
+    for sibling in seed.family_summary.sibling_markets[:2]:
+        if sibling.question:
+            phrases.append(sibling.question)
+        if sibling.outcome_name:
+            phrases.append(sibling.outcome_name)
+    return tuple(phrases)
+
+
+def _deadline_phrase(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        deadline = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    return deadline.strftime("%B %d %Y").replace(" 0", " ")
 
 
 def _freshness_rank(value: object) -> float:

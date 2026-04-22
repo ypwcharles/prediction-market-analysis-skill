@@ -5,8 +5,12 @@ import json
 from polymarket_alert_bot.config.settings import load_runtime_config
 from polymarket_alert_bot.models.records import SourceRegistry
 from polymarket_alert_bot.scanner.board_scan import AlertSeed
-from polymarket_alert_bot.scanner.family import CandidateFamilySummary
-from polymarket_alert_bot.sources.shortlist_retrieval import _filter_rows, retrieve_shortlist_evidence
+from polymarket_alert_bot.scanner.family import CandidateFamilySummary, FamilyMarketSummary
+from polymarket_alert_bot.sources.shortlist_retrieval import (
+    _build_query_terms,
+    _filter_rows,
+    retrieve_shortlist_evidence,
+)
 
 
 def test_retrieve_shortlist_evidence_filters_to_candidate_relevant_rows(tmp_path, monkeypatch):
@@ -110,6 +114,15 @@ def test_filter_rows_prefers_newer_evidence_when_scores_tie():
     assert [row["source_id"] for row in filtered] == ["new", "old"]
 
 
+def test_build_query_terms_include_family_and_deadline_context():
+    phrases, tokens = _build_query_terms(_seed())
+
+    assert "november 4 2026" in phrases
+    assert "will candidate b win in the live board?" in phrases
+    assert "2026" in tokens
+    assert "live" in tokens
+
+
 def _seed() -> AlertSeed:
     return AlertSeed(
         id="alert-1",
@@ -134,6 +147,7 @@ def _seed() -> AlertSeed:
         best_bid_cents=49.0,
         best_ask_cents=51.0,
         mid_cents=50.0,
+        last_price_cents=50.5,
         spread_bps=400.0,
         slippage_bps=200.0,
         is_degraded=False,
@@ -146,8 +160,29 @@ def _seed() -> AlertSeed:
             event_end_time="2026-11-04T05:00:00Z",
             total_markets=2,
             sibling_count=1,
-            sibling_markets=(),
+            sibling_markets=(
+                FamilyMarketSummary(
+                    market_id="mkt-live-degraded",
+                    market_slug="candidate-b-wins-live",
+                    question="Will Candidate B win in the live board?",
+                    outcome_name="Candidate B",
+                    liquidity_usd=6800.0,
+                ),
+            ),
         ),
+        ranking_summary={
+            "supported_runtime_domain": True,
+            "deadline_available": True,
+            "deadline_rank": 1793768400,
+            "family_sibling_count": 1,
+            "liquidity_usd": 0.0,
+            "spread_bps": 400.0,
+            "is_degraded": False,
+            "missing_deadline": False,
+            "missing_category": False,
+            "missing_outcome_name": False,
+            "missing_family_context": False,
+        },
         judgment_seed=None,
         evidence_seeds=(),
     )

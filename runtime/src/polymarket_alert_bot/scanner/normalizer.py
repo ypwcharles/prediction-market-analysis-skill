@@ -26,6 +26,7 @@ class ScanCandidate:
     best_bid_cents: float | None
     best_ask_cents: float | None
     mid_cents: float | None
+    last_price_cents: float | None
     spread_bps: float | None
     slippage_bps: float | None
     is_degraded: bool
@@ -97,6 +98,7 @@ def normalize_candidates(
                     best_bid_cents=_to_cents(snapshot.best_bid),
                     best_ask_cents=_to_cents(snapshot.best_ask),
                     mid_cents=_mid_cents(snapshot),
+                    last_price_cents=_to_market_cents(market.get("last_price")),
                     spread_bps=snapshot.spread_bps,
                     slippage_bps=snapshot.slippage_bps,
                     is_degraded=snapshot.is_degraded,
@@ -150,6 +152,15 @@ def _to_cents(value: float | None) -> float | None:
     if value is None:
         return None
     return round(value * 100.0, 4)
+
+
+def _to_market_cents(value: object) -> float | None:
+    price = _to_float(value)
+    if price is None:
+        return None
+    if 0.0 <= price <= 1.0:
+        return _to_cents(price)
+    return round(price, 4)
 
 
 def _mid_cents(snapshot: BookSnapshot) -> float | None:

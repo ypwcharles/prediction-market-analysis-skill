@@ -1,5 +1,6 @@
 [DEGRADED]
 scan run: run-scan-001
 monitor run: run-monitor-001
+events/contracts/shortlist/retrieved/promoted: 12/48/6/3/5
 strict/research/skipped: 2/4/19
 reason: news source timeout, monitor still healthy

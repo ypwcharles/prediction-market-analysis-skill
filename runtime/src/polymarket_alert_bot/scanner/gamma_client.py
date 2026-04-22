@@ -142,6 +142,7 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             active = bool(raw_market.get("active", False))
             liquidity_usd = _to_float(raw_market.get("liquidity"))
             outcome_name = _extract_outcome_name(raw_market)
+            last_price = _extract_last_price(raw_market)
             market_rules_text = _compose_rules_text(
                 raw_market,
                 fields=(
@@ -165,6 +166,7 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                     "token_id": token_id,
                     "condition_id": condition_id,
                     "outcome_name": outcome_name,
+                    "last_price": last_price,
                     "liquidity_usd": liquidity_usd,
                     "rules_text": rules_text,
                 }
@@ -286,6 +288,20 @@ def _extract_outcome_name(raw_market: dict[str, Any]) -> str | None:
                 value = _string_or_none(token.get(field))
                 if value is not None:
                     return value
+    return None
+
+
+def _extract_last_price(raw_market: dict[str, Any]) -> float | None:
+    for field in (
+        "lastTradePrice",
+        "last_trade_price",
+        "lastPrice",
+        "last_price",
+        "price",
+    ):
+        value = _to_float(raw_market.get(field))
+        if value is not None:
+            return value
     return None
 
 

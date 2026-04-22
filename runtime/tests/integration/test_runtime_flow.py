@@ -391,7 +391,10 @@ def test_scan_command_prefers_shortlist_retrieval_and_passes_rich_snapshot(tmp_p
     assert context["executable_fields"]["best_bid_cents"] == 49.0
     assert context["executable_fields"]["best_ask_cents"] == 51.0
     assert context["executable_fields"]["mid_cents"] == 50.0
+    assert context["executable_fields"]["last_price_cents"] == 50.5
     assert context["executable_fields"]["max_entry_cents"] == 51.0
+    assert context["candidate_facts"]["ranking_summary"]["supported_runtime_domain"] is True
+    assert context["candidate_facts"]["ranking_summary"]["family_sibling_count"] == 1
     evidence_ids = {item["source_id"] for item in context["evidence"]}
     assert {"news-candidate-a-1", "news-candidate-a-2", "x-candidate-a"} <= evidence_ids
     assert "news-unrelated" not in evidence_ids
@@ -672,7 +675,9 @@ def test_scan_command_marks_run_degraded_when_shortlist_retrieval_fails(tmp_path
     assert alert_row["alert_kind"] == "strict_degraded"
 
 
-def test_scan_command_marks_heartbeat_degraded_when_shortlist_retrieval_fails(tmp_path, monkeypatch):
+def test_scan_command_marks_heartbeat_degraded_when_shortlist_retrieval_fails(
+    tmp_path, monkeypatch
+):
     data_dir = tmp_path / ".runtime-data"
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
@@ -744,6 +749,7 @@ def test_scan_command_marks_heartbeat_degraded_when_shortlist_retrieval_fails(tm
     assert heartbeat_row is not None
     heartbeat_text = Path(heartbeat_row["archive_path"]).read_text(encoding="utf-8")
     assert heartbeat_text.startswith("[DEGRADED]")
+    assert "events/contracts/shortlist/retrieved/promoted: 1/2/2/0/1" in heartbeat_text
     assert "shortlist_x_failed:TimeoutError" in heartbeat_text
 
 

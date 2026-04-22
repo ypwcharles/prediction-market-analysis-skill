@@ -432,6 +432,7 @@ def _seed_candidate_facts(seed: AlertSeed) -> dict[str, Any]:
         "expression_summary": seed.expression_summary,
         "expression_key": seed.expression_key,
         "family_summary": seed.family_summary.as_dict(),
+        "ranking_summary": seed.ranking_summary,
         "rules_text": seed.rules_text or "",
         "degraded_reason": seed.degraded_reason,
     }
@@ -442,6 +443,7 @@ def _seed_executable_fields(seed: AlertSeed) -> dict[str, Any]:
         "best_bid_cents": seed.best_bid_cents,
         "best_ask_cents": seed.best_ask_cents,
         "mid_cents": seed.mid_cents,
+        "last_price_cents": seed.last_price_cents,
         "max_entry_cents": seed.best_ask_cents,
         "spread_bps": seed.spread_bps,
         "slippage_bps": seed.slippage_bps,

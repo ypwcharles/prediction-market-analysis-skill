@@ -42,6 +42,7 @@ def test_scan_pipeline_prefilters_and_coverage_accounting():
     assert outcome.tradable[0].best_bid_cents == 49.0
     assert outcome.tradable[0].best_ask_cents == 51.0
     assert outcome.tradable[0].mid_cents == 50.0
+    assert outcome.tradable[0].last_price_cents == 51.5
     assert outcome.tradable[0].family_summary.sibling_count == 2
     assert (
         outcome.tradable[0].expression_key
@@ -123,7 +124,10 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     assert result.alert_seeds[0].best_bid_cents == 49.0
     assert result.alert_seeds[0].best_ask_cents == 51.0
     assert result.alert_seeds[0].mid_cents == 50.0
+    assert result.alert_seeds[0].last_price_cents == 50.5
     assert result.alert_seeds[0].family_summary.sibling_count == 1
+    assert result.alert_seeds[0].ranking_summary["supported_runtime_domain"] is True
+    assert result.alert_seeds[0].ranking_summary["family_sibling_count"] == 1
 
     conn = connect_db(paths.db_path)
     rows = conn.execute(
