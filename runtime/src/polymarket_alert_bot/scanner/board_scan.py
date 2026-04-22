@@ -253,6 +253,10 @@ def _prefilter(
             continue
 
         if candidate.is_degraded:
+            if candidate.degraded_reason == "book_missing_side":
+                rejected_wide_spread += 1
+                rejected.append((candidate, "one_sided_book"))
+                continue
             degraded_books += 1
             degraded.append(candidate)
             continue

@@ -176,6 +176,47 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     }
 
 
+def test_scan_pipeline_treats_one_sided_books_as_untradable_not_degraded():
+    gamma_payload = [
+        {
+            "id": "event-one-sided",
+            "slug": "one-sided-book",
+            "markets": [
+                {
+                    "id": "mkt-one-sided",
+                    "slug": "one-sided-market",
+                    "question": "Will one-sided market resolve YES?",
+                    "lastTradePrice": 0.615,
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-one-sided",
+                    "liquidity": 3200,
+                    "token_id": "token-one-sided",
+                }
+            ],
+        }
+    ]
+    clob_payload = {
+        "books": [
+            {
+                "token_id": "token-one-sided",
+                "bids": [{"price": "0.61", "size": "1000"}],
+                "asks": [],
+            }
+        ]
+    }
+
+    outcome = scan_board(gamma_payload, clob_payload)
+
+    assert outcome.coverage.total_candidates == 1
+    assert outcome.coverage.degraded_books == 0
+    assert outcome.coverage.rejected_wide_spread == 1
+    assert outcome.degraded == ()
+    assert outcome.tradable == ()
+    assert outcome.rejected[0][0].market_id == "mkt-one-sided"
+    assert outcome.rejected[0][1] == "one_sided_book"
+
+
 def test_run_scan_live_uses_runtime_config_urls_and_limit(monkeypatch, tmp_path):
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")

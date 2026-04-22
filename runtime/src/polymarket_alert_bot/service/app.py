@@ -58,7 +58,12 @@ def create_app(
     owns_scheduler = scheduler is None
     resolved_scheduler = scheduler or RuntimeServiceScheduler(
         [
-            ScheduledJob("scan", config.scan_interval_seconds, resolved_scan_runner),
+            ScheduledJob(
+                "scan",
+                config.scan_interval_seconds,
+                resolved_scan_runner,
+                run_immediately=True,
+            ),
             ScheduledJob("monitor", config.monitor_interval_seconds, resolved_monitor_runner),
             ScheduledJob("report", config.report_interval_seconds, resolved_report_runner),
         ]
