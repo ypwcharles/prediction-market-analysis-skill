@@ -31,9 +31,25 @@ def test_parse_semantic_relevance_result_accepts_decision_aliases() -> None:
     assert parsed.decisions[0].conflict_status == "active"
 
 
+def test_parse_semantic_relevance_result_preserves_unset_keep_without_verdict() -> None:
+    parsed = parse_semantic_relevance_result(
+        {
+            "items": [
+                {
+                    "source_id": "wire-1",
+                    "stance": "supports",
+                }
+            ],
+        }
+    )
+
+    assert parsed.decisions[0].keep is None
+    assert parsed.decisions[0].conflict_status is None
+
+
 def test_parse_semantic_relevance_result_rejects_non_object_payload() -> None:
     try:
-        parse_semantic_relevance_result(["not", "an", "object"])
+        parse_semantic_relevance_result('["not", "an", "object"]')
     except ParseError:
         pass
     else:
@@ -61,6 +77,116 @@ def test_semantic_relevance_adapter_filters_and_marks_conflicts() -> None:
     assert [item.source_id for item in result.items] == ["wire-a", "wire-b"]
     assert result.items[0].conflict_status is None
     assert result.items[1].conflict_status == "active"
+
+
+def test_semantic_relevance_adapter_treats_kept_source_ids_as_authoritative_without_explicit_keep() -> (
+    None
+):
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "kept_source_ids": ["wire-a"],
+            "items": [
+                {"source_id": "wire-a", "stance": "supports"},
+                {"source_id": "wire-b", "stance": "conflicts"},
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(seed=_seed(), evidence_items=_evidence_items())
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-a"]
+
+
+def test_semantic_relevance_adapter_treats_kept_source_ids_as_authoritative_even_with_positive_verdicts() -> (
+    None
+):
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "kept_source_ids": ["wire-a"],
+            "items": [
+                {"source_id": "wire-a", "relevance": "settlement relevant"},
+                {"source_id": "wire-b", "relevance": "settlement relevant"},
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(seed=_seed(), evidence_items=_evidence_items())
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-a"]
+
+
+def test_semantic_relevance_adapter_treats_dropped_source_ids_as_authoritative_without_explicit_keep() -> (
+    None
+):
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "dropped_source_ids": ["wire-b"],
+            "items": [
+                {"source_id": "wire-a", "stance": "supports"},
+                {"source_id": "wire-b", "stance": "conflicts"},
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(seed=_seed(), evidence_items=_evidence_items())
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-a", "wire-c"]
+
+
+def test_semantic_relevance_adapter_treats_dropped_source_ids_as_authoritative_even_with_positive_verdicts() -> (
+    None
+):
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "dropped_source_ids": ["wire-b"],
+            "items": [
+                {"source_id": "wire-a", "relevance": "settlement relevant"},
+                {"source_id": "wire-b", "relevance": "settlement relevant"},
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(seed=_seed(), evidence_items=_evidence_items())
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-a", "wire-c"]
+
+
+def test_semantic_relevance_adapter_matches_nested_source_url_without_source_id() -> None:
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "items": [
+                {
+                    "source": {"url": "https://news.example.test/b"},
+                    "claim_snippet": "Election authority says Candidate B was certified instead.",
+                    "keep": False,
+                }
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(seed=_seed(), evidence_items=_evidence_items())
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-a", "wire-c"]
 
 
 def test_semantic_relevance_adapter_falls_back_on_malformed_output() -> None:

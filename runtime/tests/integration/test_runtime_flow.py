@@ -524,6 +524,150 @@ def test_scan_command_applies_semantic_relevance_before_final_judgment(tmp_path,
     assert "news-candidate-a-2" not in {item["source_id"] for item in evidence_rows[0]}
 
 
+def test_scan_command_routes_strict_candidate_to_research_when_semantic_filter_removes_primary_support(
+    tmp_path, monkeypatch
+):
+    data_dir = tmp_path / ".runtime-data"
+    news_feed = tmp_path / "news-feed.json"
+    x_feed = tmp_path / "x-feed.json"
+    news_feed.write_text(
+        json.dumps(
+            [
+                {
+                    "source_id": "news-candidate-a-1",
+                    "url": "https://news.example.test/candidate-a-1",
+                    "claim_snippet": "Candidate A still has no certified result.",
+                    "tier": "primary",
+                },
+                {
+                    "source_id": "news-candidate-a-2",
+                    "url": "https://news.example.test/candidate-a-2",
+                    "claim_snippet": "Election desk says certification is still pending for Candidate A.",
+                    "tier": "primary",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    x_feed.write_text(
+        json.dumps(
+            [
+                {
+                    "source_id": "x-candidate-a",
+                    "handle": "@polymarket",
+                    "url": "https://x.com/polymarket/status/1",
+                    "claim_snippet": "Candidate A market repricing after election desk chatter.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_TELEGRAM_CHAT_ID", "-100123456")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_SCAN_MAX_JUDGMENT_CANDIDATES", "1")
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_NEWS_FEED_URL", str(news_feed))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_X_FEED_URL", str(x_feed))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_ENABLED", "1")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys;"
+                    "payload=json.load(sys.stdin);"
+                    "json.dump({"
+                    "'kept_source_ids':['news-candidate-a-1'],"
+                    "'items':["
+                    "{'source_id':'news-candidate-a-1','relevance':'settlement relevant'},"
+                    "{'source_id':'news-candidate-a-2','relevance':'settlement relevant'}"
+                    "]"
+                    "},sys.stdout)"
+                ),
+            ]
+        ),
+    )
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_JUDGMENT_RUNNER_CMD",
+        " ".join(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys;"
+                    "json.dump({"
+                    "'alert_kind':'strict',"
+                    "'cluster_action':'create',"
+                    "'ttl_hours':6,"
+                    "'thesis':'still strict absent semantic filter',"
+                    "'side':'NO',"
+                    "'theoretical_edge_cents':14.0,"
+                    "'executable_edge_cents':10.0,"
+                    "'max_entry_cents':43.0,"
+                    "'suggested_size_usdc':200.0,"
+                    "'why_now':'strict before deterministic gate',"
+                    "'kill_criteria_text':'official certification',"
+                    "'summary':'semantic strict gate check',"
+                    "'watch_item':'watch certification',"
+                    "'citations':[],"
+                    "'triggers':[],"
+                    "'archive_payload':{'summary':'semantic strict gate check'}"
+                    "},sys.stdout)"
+                ),
+            ]
+        ),
+    )
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_book(token_id: str) -> BookSnapshot:
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.49,
+            best_ask=0.51,
+            spread_bps=400.0,
+            slippage_bps=200.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    monkeypatch.setattr(
+        "polymarket_alert_bot.scanner.board_scan.fetch_events", lambda: gamma_payload
+    )
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+
+    assert main(["scan"]) == 0
+
+    conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    alert_row = conn.execute(
+        """
+        SELECT alert_kind
+        FROM alerts
+        WHERE run_id = (
+            SELECT id FROM runs WHERE run_type = 'scan' ORDER BY created_at DESC LIMIT 1
+        )
+          AND market_id = 'mkt-live-tradable'
+        """
+    ).fetchone()
+    assert alert_row["alert_kind"] == "research"
+
+    run_row = conn.execute(
+        """
+        SELECT status, degraded_reason
+        FROM runs
+        WHERE run_type = 'scan'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    assert run_row["status"] == "clean"
+    assert run_row["degraded_reason"] is None
+
+
 def test_scan_command_falls_back_to_lexical_bundle_when_semantic_relevance_fails(
     tmp_path, monkeypatch
 ):

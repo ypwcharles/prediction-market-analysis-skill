@@ -30,7 +30,7 @@ class SemanticEvidenceDecision(BaseModel):
     source_id: str | None = None
     url: str | None = None
     claim_snippet: str | None = None
-    keep: bool = True
+    keep: bool | None = None
     conflict_status: str | None = None
     reason: str | None = None
 
@@ -301,10 +301,19 @@ def _apply_decisions(
     parsed: ParsedSemanticRelevance,
 ) -> tuple[EvidenceItem, ...]:
     decisions_by_key: dict[tuple[str | None, str | None, str | None], SemanticEvidenceDecision] = {}
+    decisions_by_url_claim: dict[tuple[str, str], SemanticEvidenceDecision] = {}
+    decisions_by_url: dict[str, SemanticEvidenceDecision] = {}
     decisions_by_source_id: dict[str, SemanticEvidenceDecision] = {}
     for parsed_decision in parsed.decisions:
         key = (parsed_decision.source_id, parsed_decision.url, parsed_decision.claim_snippet)
         decisions_by_key[key] = parsed_decision
+        if parsed_decision.url and parsed_decision.claim_snippet:
+            decisions_by_url_claim.setdefault(
+                (parsed_decision.url, parsed_decision.claim_snippet),
+                parsed_decision,
+            )
+        if parsed_decision.url:
+            decisions_by_url.setdefault(parsed_decision.url, parsed_decision)
         if parsed_decision.source_id:
             decisions_by_source_id.setdefault(parsed_decision.source_id, parsed_decision)
 
@@ -314,18 +323,20 @@ def _apply_decisions(
 
     filtered: list[EvidenceItem] = []
     for item in evidence_items:
-        decision: SemanticEvidenceDecision | None = decisions_by_key.get(
-            (item.source_id, item.url, item.claim_snippet)
+        decision = _match_decision(
+            item,
+            decisions_by_key=decisions_by_key,
+            decisions_by_url_claim=decisions_by_url_claim,
+            decisions_by_url=decisions_by_url,
+            decisions_by_source_id=decisions_by_source_id,
         )
-        if decision is None:
-            decision = decisions_by_source_id.get(item.source_id)
 
         keep = True
         if kept_source_ids:
             keep = item.source_id in kept_source_ids
         elif dropped_source_ids:
             keep = item.source_id not in dropped_source_ids
-        if decision is not None:
+        elif decision is not None and decision.keep is not None:
             keep = decision.keep
 
         if not keep:
@@ -351,6 +362,32 @@ def _apply_decisions(
             )
         )
     return tuple(filtered)
+
+
+def _match_decision(
+    item: EvidenceItem,
+    *,
+    decisions_by_key: dict[tuple[str | None, str | None, str | None], SemanticEvidenceDecision],
+    decisions_by_url_claim: dict[tuple[str, str], SemanticEvidenceDecision],
+    decisions_by_url: dict[str, SemanticEvidenceDecision],
+    decisions_by_source_id: dict[str, SemanticEvidenceDecision],
+) -> SemanticEvidenceDecision | None:
+    exact_match = decisions_by_key.get((item.source_id, item.url, item.claim_snippet))
+    if exact_match is not None:
+        return exact_match
+
+    if item.url and item.claim_snippet:
+        url_claim_match = decisions_by_url_claim.get((item.url, item.claim_snippet))
+        if url_claim_match is not None:
+            return url_claim_match
+
+    source_id_match = decisions_by_source_id.get(item.source_id)
+    if source_id_match is not None:
+        return source_id_match
+
+    if item.url:
+        return decisions_by_url.get(item.url)
+    return None
 
 
 def _normalize_label(value: str) -> str:
