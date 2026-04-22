@@ -210,7 +210,8 @@ def test_scan_pipeline_treats_one_sided_books_as_untradable_not_degraded():
 
     assert outcome.coverage.total_candidates == 1
     assert outcome.coverage.degraded_books == 0
-    assert outcome.coverage.rejected_wide_spread == 1
+    assert outcome.coverage.rejected_wide_spread == 0
+    assert outcome.coverage.rejected_one_sided_book == 1
     assert outcome.degraded == ()
     assert outcome.tradable == ()
     assert outcome.rejected[0][0].market_id == "mkt-one-sided"
