@@ -13,6 +13,7 @@ from polymarket_alert_bot.sources.news_client import NewsClient
 from polymarket_alert_bot.sources.x_client import XClient
 
 MAX_ITEMS_PER_SOURCE = 4
+MIN_PRIMARY_ITEMS_TO_PRESERVE = 2
 STOPWORDS = {
     "the",
     "will",
@@ -111,7 +112,7 @@ def filter_seed_evidence_items(
             item[1].source_id,
         )
     )
-    return tuple(_dedupe_items(item for _, item in scored[:MAX_ITEMS_PER_SOURCE]))
+    return _select_scored_evidence_items(scored)
 
 
 def _build_query_terms(seed: AlertSeed) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -177,7 +178,7 @@ def _filter_rows(
             str(item[1].get("source_id") or ""),
         )
     )
-    return [row for _, row in scored[:MAX_ITEMS_PER_SOURCE]]
+    return _select_scored_rows(scored)
 
 
 def _row_text(row: dict[str, object]) -> str:
@@ -210,6 +211,62 @@ def _dedupe_items(items: Iterable[EvidenceItem]) -> list[EvidenceItem]:
         seen.add(key)
         deduped.append(item)
     return deduped
+
+
+def _select_scored_evidence_items(
+    scored_items: list[tuple[int, EvidenceItem]],
+) -> tuple[EvidenceItem, ...]:
+    selected: list[EvidenceItem] = []
+    seen: set[tuple[str, str, str]] = set()
+    primary_selected = 0
+
+    for _, item in scored_items:
+        if item.tier != "primary":
+            continue
+        key = (item.source_id, item.url, item.claim_snippet)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(item)
+        primary_selected += 1
+        if (
+            primary_selected >= MIN_PRIMARY_ITEMS_TO_PRESERVE
+            or len(selected) >= MAX_ITEMS_PER_SOURCE
+        ):
+            break
+
+    if len(selected) >= MAX_ITEMS_PER_SOURCE:
+        return tuple(selected)
+
+    for _, item in scored_items:
+        key = (item.source_id, item.url, item.claim_snippet)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(item)
+        if len(selected) >= MAX_ITEMS_PER_SOURCE:
+            break
+    return tuple(selected)
+
+
+def _select_scored_rows(
+    scored_rows: list[tuple[int, dict[str, object]]],
+) -> list[dict[str, object]]:
+    selected: list[dict[str, object]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for _, row in scored_rows:
+        key = (
+            str(row.get("source_id") or ""),
+            str(row.get("url") or ""),
+            str(row.get("claim_snippet") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(row)
+        if len(selected) >= MAX_ITEMS_PER_SOURCE:
+            break
+    return selected
 
 
 def _normalize_text(text: object) -> str:
