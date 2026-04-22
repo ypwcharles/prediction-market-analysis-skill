@@ -34,3 +34,27 @@
 - Effort estimate: L human / M with CC+gstack
 - Priority: P2
 - Depends on / blocked by: Successful completion of current hardening plan and stable alert-quality instrumentation
+
+## Deferred From Scan Discovery Foundation Autoplan
+
+### 1. Multi-entry universe construction beyond `volume24hr`
+
+- What: Replace the single top-volume Gamma intake with a broader universe-construction strategy, such as category buckets, deadline buckets, or multiple board slices.
+- Why: Ranking and shortlist retrieval can only improve contracts that were actually fetched. The current runtime still starts from a biased universe.
+- Pros: Improves recall, reduces hot-market crowding bias, and increases the chance of finding cleaner middle-board opportunities.
+- Cons: Adds more HTTP calls, more candidate bookkeeping, and a larger calibration surface.
+- Context: Both CEO and Eng review phases agreed that biased intake remains the biggest debt after this phase. Start from `runtime/src/polymarket_alert_bot/scanner/gamma_client.py` and `runtime/src/polymarket_alert_bot/scanner/board_scan.py`.
+- Effort estimate: M human / S with CC+gstack
+- Priority: P1
+- Depends on / blocked by: Stable ranking, truthful coverage counters, and clear shortlist semantics from the current phase
+
+### 2. Cross-event equivalent-expression discovery
+
+- What: Add logic to detect cleaner expressions across related events, not just same-event siblings.
+- Why: Same-event family summaries recover only part of the contract-selection wedge. Many of the best alternatives live across events, buckets, or rule-scope variants.
+- Pros: Better expression selection, more opportunities to reject the asked contract in favor of a cleaner nearby one, and stronger use of the prediction-market-analysis skill's actual methodology.
+- Cons: Higher ambiguity, more false matches, and likely need for stronger identity / dominance logic.
+- Context: The current phase intentionally keeps family logic same-event only. Revisit after family summaries, retrieval, and coverage accounting are stable.
+- Effort estimate: L human / M with CC+gstack
+- Priority: P2
+- Depends on / blocked by: Stable same-event family summaries plus a stronger evidence / rule-scope comparison layer

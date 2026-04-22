@@ -34,6 +34,10 @@ def test_scan_pipeline_prefilters_and_coverage_accounting():
     assert [candidate.market_id for candidate in outcome.degraded] == ["mkt-degraded"]
     assert outcome.tradable[0].condition_id == "cond-election-a"
     assert outcome.degraded[0].condition_id == "cond-fed-may"
+    assert outcome.tradable[0].best_bid_cents == 49.0
+    assert outcome.tradable[0].best_ask_cents == 51.0
+    assert outcome.tradable[0].mid_cents == 50.0
+    assert outcome.tradable[0].family_summary.sibling_count == 2
     assert (
         outcome.tradable[0].expression_key
         == "event-election::will candidate a win the 2026 election?"
@@ -107,6 +111,14 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
     assert result.alert_seeds[1].evidence_seeds == (
         {"source": "news", "url": "https://example.com/news"},
     )
+    assert result.alert_seeds[0].event_title == "2026 Live Election"
+    assert result.alert_seeds[0].event_category == "Politics"
+    assert result.alert_seeds[0].event_end_time == "2026-11-04T05:00:00Z"
+    assert result.alert_seeds[0].outcome_name == "Candidate A"
+    assert result.alert_seeds[0].best_bid_cents == 49.0
+    assert result.alert_seeds[0].best_ask_cents == 51.0
+    assert result.alert_seeds[0].mid_cents == 50.0
+    assert result.alert_seeds[0].family_summary.sibling_count == 1
 
     conn = connect_db(paths.db_path)
     rows = conn.execute(
@@ -128,7 +140,7 @@ def test_run_scan_live_orchestration_persists_seed_alerts(monkeypatch, tmp_path)
         [result.run_id],
     ).fetchone()
     assert dict(run_row) == {
-        "scanned_events": result.outcome.coverage.total_markets,
+        "scanned_events": result.outcome.coverage.total_events,
         "scanned_contracts": result.outcome.coverage.total_candidates,
     }
 
