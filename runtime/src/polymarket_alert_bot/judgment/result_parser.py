@@ -39,7 +39,7 @@ class Citation(BaseModel):
     fetched_at: str | None = None
     claim_id: str | None = None
     claim_scope: str | None = None
-    confidence: float | None = None
+    confidence: float | str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -54,6 +54,16 @@ class Citation(BaseModel):
             payload.setdefault("source_name", source.get("name"))
             payload.setdefault("source_tier", source.get("tier"))
             payload.setdefault("fetched_at", source.get("fetched_at"))
+        confidence = payload.get("confidence")
+        if isinstance(confidence, str):
+            trimmed = confidence.strip()
+            if trimmed:
+                try:
+                    payload["confidence"] = float(trimmed)
+                except ValueError:
+                    payload["confidence"] = trimmed
+            else:
+                payload["confidence"] = None
         payload.setdefault("source_id", "unknown_source")
         payload.setdefault("url", "about:blank")
         return payload
@@ -111,7 +121,7 @@ class ArchivePayload(BaseModel):
     thesis_cluster_id: str | None = None
     alert_id: str | None = None
     message_refs: list[dict[str, Any]] = Field(default_factory=list)
-    trigger_payload: dict[str, Any] = Field(default_factory=dict)
+    trigger_payload: dict[str, Any] | list[dict[str, Any]] = Field(default_factory=dict)
     trigger_metadata: dict[str, Any] = Field(default_factory=dict)
     delivery: dict[str, Any] = Field(default_factory=dict)
 

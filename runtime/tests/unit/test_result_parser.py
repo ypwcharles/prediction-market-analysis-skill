@@ -17,7 +17,7 @@ from polymarket_alert_bot.sources.x_client import XClient
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 
 
-def _load_fixture(name: str) -> list[dict[str, object]]:
+def _load_fixture(name: str):
     with (FIXTURES_DIR / name).open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
@@ -105,6 +105,100 @@ def test_parse_judgment_result_supports_claim_aware_citation_and_rich_trigger_me
     assert parsed.triggers[0].trigger_state == "fired"
     assert parsed.archive_payload["message_refs"][0]["message_id"] == "45"
     assert parsed.archive_payload["trigger_payload"]["condition"] == "yes>=0.61"
+
+
+def test_parse_judgment_result_accepts_string_confidence_labels() -> None:
+    payload = {
+        "alert_kind": "research",
+        "cluster_action": "none",
+        "ttl_hours": 3,
+        "citations": [
+            {
+                "source_id": "reuters_confidence",
+                "url": "https://example.com/reuters-confidence",
+                "claim": "Primary filing exists.",
+                "confidence": "high",
+            }
+        ],
+        "triggers": [],
+        "archive_payload": {},
+    }
+
+    parsed = parse_judgment_result(payload)
+
+    assert parsed.citations[0].confidence == "high"
+
+
+def test_parse_judgment_result_normalizes_numeric_string_confidence_values() -> None:
+    payload = {
+        "alert_kind": "research",
+        "cluster_action": "none",
+        "ttl_hours": 3,
+        "citations": [
+            {
+                "source_id": "reuters_numeric_confidence",
+                "url": "https://example.com/reuters-numeric-confidence",
+                "claim": "Primary filing exists.",
+                "confidence": " 0.72 ",
+            }
+        ],
+        "triggers": [],
+        "archive_payload": {},
+    }
+
+    parsed = parse_judgment_result(payload)
+
+    assert parsed.citations[0].confidence == 0.72
+
+
+def test_parse_judgment_result_accepts_list_trigger_payloads_from_real_hermes_output() -> None:
+    payload = {
+        "alert_kind": "monitor",
+        "cluster_action": "none",
+        "ttl_hours": 2,
+        "citations": [],
+        "triggers": [
+            {
+                "trigger_type": "catalyst_checkpoint",
+                "condition": "official call or certified result naming the winner",
+            }
+        ],
+        "archive_payload": {
+            "reason": "evidence_not_settlement_relevant",
+            "summary": "Current evidence bundle does not bear directly on the certification-based rule.",
+            "trigger_payload": [
+                {
+                    "trigger_type": "catalyst_checkpoint",
+                    "condition": "official call or certified result naming the winner",
+                },
+                {
+                    "trigger_type": "price_threshold",
+                    "condition": "spread/slippage compress materially alongside settlement-relevant evidence",
+                },
+            ],
+            "trigger_metadata": {
+                "market_id": "mkt-live-tradable",
+                "condition_id": "cond-live-a",
+            },
+        },
+    }
+
+    parsed = parse_judgment_result(payload)
+
+    assert isinstance(parsed.archive_payload["trigger_payload"], list)
+    assert parsed.archive_payload["trigger_payload"][0]["trigger_type"] == "catalyst_checkpoint"
+    assert parsed.archive_payload["trigger_metadata"]["condition_id"] == "cond-live-a"
+
+
+def test_parse_judgment_result_accepts_captured_real_hermes_monitor_output() -> None:
+    payload = _load_fixture("real_hermes_monitor_output.json")
+
+    parsed = parse_judgment_result(payload)
+
+    assert parsed.alert_kind == "monitor"
+    assert parsed.cluster_action == "none"
+    assert isinstance(parsed.archive_payload["trigger_payload"], list)
+    assert parsed.archive_payload["trigger_payload"][0]["trigger_type"] == "catalyst_checkpoint"
 
 
 def test_skill_adapter_external_command_runner_success() -> None:
