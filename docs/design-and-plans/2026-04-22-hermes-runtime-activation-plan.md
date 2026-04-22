@@ -238,12 +238,12 @@ Why this order:
 4. umbrella execution issue for the full activation path
 
 ### Branching recommendation
-- branch 1: `fix/runtime-contract-drift`
-- branch 2: `fix/hermes-runner-timeouts`
-- branch 3: `fix/runtime-trigger-schema`
-- branch 4: `feat/live-opportunity-discovery`
+- active hardening branch 1: `fix/runtime-contract-drift`
+- active hardening branch 2: `fix/hermes-runtime-stability`
+- keep timeout and trigger-schema fixes on the active hardening stack unless someone explicitly restacks the open PRs
+- reserve `feat/live-opportunity-discovery` for after the hardening stack lands
 
-Keep the first three as hardening branches. Do not mix them into the discovery feature branch.
+Keep the current hardening work on the existing stack. Do not create parallel timeout or trigger-schema branches from this plan unless the stack is intentionally re-cut first.
 
 ---
 
