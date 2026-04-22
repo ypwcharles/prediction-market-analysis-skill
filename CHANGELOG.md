@@ -2,6 +2,26 @@
 
 All notable changes to this repository are tracked here.
 
+## [0.2.0.0] - 2026-04-22
+
+### Added
+
+- Added richer scan payloads so judgment now sees best bid, best ask, mid, last price, event metadata, family context, and ranking context in one path from scan to archive.
+- Added shortlist retrieval inputs that pull in sibling-expression and deadline phrases, plus heartbeat output that shows shortlist, retrieval, and promoted-seed counts directly in the archive.
+- Added coverage for ranking metadata, retrieval query shaping, richer executable fields, and the updated heartbeat/reporting path.
+
+### Changed
+
+- Changed scan accounting so runs now persist shortlist size, retrieved-shortlist size, promoted seed count, missing-metadata counters, and rejection explanations instead of relying on coarse ops-style counts alone.
+- Changed ranking to expose explicit metadata-missing flags and supported-domain context, which makes shortlist ordering and later miss review easier to inspect.
+- Changed the scan smoke path and fixtures so real fixture-backed runs exercise the richer payload shape and recall-first counters.
+
+### Fixed
+
+- Fixed the remaining gap between the scan discovery foundation plan and the shipped runtime by making shortlist and retrieval accounting visible in run state and heartbeat artifacts.
+- Fixed retrieval query generation so promoted candidates can use same-event family and deadline context instead of relying only on the primary expression text.
+- Fixed heartbeat verification drift by snapshotting the richer deploy-time counters and keeping the fixture-backed runtime flow consistent with persisted scan semantics.
+
 ## [0.1.0.0] - 2026-04-21
 
 ### Added
