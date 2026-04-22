@@ -97,6 +97,9 @@ def test_status_requires_bearer_auth(tmp_path, monkeypatch):
     assert "latest_runs" in body
     assert "counts" in body
     assert "scheduler" in body
+    assert body["scheduler"]["jobs"]["scan"]["run_immediately"] is True
+    assert body["scheduler"]["jobs"]["monitor"]["run_immediately"] is False
+    assert body["scheduler"]["jobs"]["report"]["run_immediately"] is False
 
 
 @pytest.mark.parametrize(

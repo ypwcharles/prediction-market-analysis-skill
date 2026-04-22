@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 
 from polymarket_alert_bot.service.scheduler import RuntimeServiceScheduler, ScheduledJob
+from polymarket_alert_bot.storage.locks import LockHeldError
 
 
 def test_run_job_now_updates_snapshot_fields():
@@ -130,3 +131,44 @@ def test_start_runs_short_interval_jobs_with_fake_runner_callbacks():
     assert snapshot["running"] is False
     assert job["run_count"] >= 2
     assert job["last_error"] is None
+
+
+def test_start_retries_immediate_job_once_when_lock_is_held():
+    retried_successfully = threading.Event()
+    call_count = 0
+    count_lock = threading.Lock()
+
+    def _runner():
+        nonlocal call_count
+        with count_lock:
+            call_count += 1
+            current_call = call_count
+        if current_call == 1:
+            raise LockHeldError("lock already held: /tmp/scan.lock")
+        retried_successfully.set()
+
+    scheduler = RuntimeServiceScheduler(
+        [
+            ScheduledJob(
+                name="scan",
+                interval_seconds=60.0,
+                runner=_runner,
+                run_immediately=True,
+                startup_retry_attempts=1,
+                startup_retry_delay_seconds=0.01,
+            )
+        ]
+    )
+
+    scheduler.start()
+    try:
+        assert retried_successfully.wait(timeout=1.0)
+    finally:
+        scheduler.stop()
+
+    snapshot = scheduler.snapshot()
+    job = snapshot["jobs"]["scan"]
+    assert call_count == 2
+    assert job["run_count"] == 2
+    assert job["last_error"] is None
+    assert job["last_finished_at"] is not None

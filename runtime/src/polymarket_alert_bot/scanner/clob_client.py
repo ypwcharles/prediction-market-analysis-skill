@@ -47,17 +47,24 @@ def fetch_book(
         close_client = True
 
     try:
-        try:
-            response = client.get(url, params={"token_id": token_id})
-            if response.status_code == 404:
-                return degraded_snapshot(token_id, "book_missing")
-            response.raise_for_status()
-            payload = response.json()
-        except (httpx.HTTPError, ValueError):
-            return degraded_snapshot(token_id, "book_fetch_error")
-        if not isinstance(payload, Mapping):
-            return degraded_snapshot(token_id, "book_malformed")
-        return snapshot_from_book(token_id, payload)
+        for attempt in range(2):
+            try:
+                response = client.get(url, params={"token_id": token_id})
+                if response.status_code == 404:
+                    return degraded_snapshot(token_id, "book_missing")
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, Mapping):
+                    return degraded_snapshot(token_id, "book_malformed")
+                return snapshot_from_book(token_id, payload)
+            except httpx.HTTPStatusError:
+                return degraded_snapshot(token_id, "book_fetch_error")
+            except httpx.TransportError:
+                if attempt == 1:
+                    return degraded_snapshot(token_id, "book_fetch_error")
+            except ValueError:
+                return degraded_snapshot(token_id, "book_fetch_error")
+        return degraded_snapshot(token_id, "book_fetch_error")
     finally:
         if close_client:
             client.close()

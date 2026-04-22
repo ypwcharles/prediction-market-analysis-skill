@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import httpx
+
+from polymarket_alert_bot.scanner.clob_client import fetch_book
 from polymarket_alert_bot.scanner.gamma_client import fetch_events, normalize_events
 
 
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, *, status_code: int = 200, raise_http: bool = False):
+        self.status_code = status_code
         self._payload = payload
+        self._raise_http = raise_http
 
     def raise_for_status(self) -> None:
-        return None
+        if self._raise_http:
+            raise httpx.HTTPStatusError("boom", request=None, response=None)
 
     def json(self):
         return self._payload
@@ -22,6 +28,19 @@ class _FakeClient:
     def get(self, url, params=None):
         self.calls.append((url, params))
         return _FakeResponse(self.payload)
+
+
+class _FlakyClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def get(self, url, params=None):
+        self.calls.append((url, params))
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def test_fetch_events_requests_open_active_markets() -> None:
@@ -78,6 +97,58 @@ def test_normalize_events_accepts_market_payloads_with_clob_token_ids() -> None:
     assert market["token_id"] == "token-yes"
     assert market["status"] == "open"
     assert market["active"] is True
+
+
+def test_fetch_book_retries_once_on_transient_http_error() -> None:
+    import pytest
+
+    client = _FlakyClient(
+        [
+            httpx.ReadTimeout("timeout"),
+            _FakeResponse(
+                {
+                    "bids": [{"price": "0.40"}],
+                    "asks": [{"price": "0.42"}],
+                }
+            ),
+        ]
+    )
+
+    snapshot = fetch_book("token-1", http_client=client, url="https://clob.example.test/book")
+
+    assert client.calls == [
+        ("https://clob.example.test/book", {"token_id": "token-1"}),
+        ("https://clob.example.test/book", {"token_id": "token-1"}),
+    ]
+    assert snapshot.token_id == "token-1"
+    assert snapshot.best_bid == 0.40
+    assert snapshot.best_ask == 0.42
+    assert snapshot.spread_bps == pytest.approx(487.8048780487807)
+    assert snapshot.slippage_bps == pytest.approx(243.90243902439034)
+    assert snapshot.is_degraded is False
+    assert snapshot.degraded_reason is None
+
+
+def test_fetch_book_does_not_retry_http_status_errors() -> None:
+    client = _FlakyClient(
+        [
+            _FakeResponse({}, raise_http=True),
+            _FakeResponse(
+                {
+                    "bids": [{"price": "0.40"}],
+                    "asks": [{"price": "0.42"}],
+                }
+            ),
+        ]
+    )
+
+    snapshot = fetch_book("token-1", http_client=client, url="https://clob.example.test/book")
+
+    assert client.calls == [
+        ("https://clob.example.test/book", {"token_id": "token-1"}),
+    ]
+    assert snapshot.is_degraded is True
+    assert snapshot.degraded_reason == "book_fetch_error"
 
 
 def test_normalize_events_groups_market_rows_under_one_event() -> None:

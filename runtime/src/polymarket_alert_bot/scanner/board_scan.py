@@ -43,6 +43,7 @@ class ScanCoverage:
     rejected_inactive: int
     rejected_low_liquidity: int
     rejected_wide_spread: int
+    rejected_one_sided_book: int
     rejected_duplicate: int
     degraded_books: int
 
@@ -52,6 +53,7 @@ class ScanCoverage:
             self.rejected_inactive
             + self.rejected_low_liquidity
             + self.rejected_wide_spread
+            + self.rejected_one_sided_book
             + self.rejected_duplicate
             + self.degraded_books
         )
@@ -243,6 +245,7 @@ def _prefilter(
     rejected_inactive = 0
     rejected_low_liquidity = 0
     rejected_wide_spread = 0
+    rejected_one_sided_book = 0
     rejected_duplicate = 0
     degraded_books = 0
 
@@ -253,6 +256,10 @@ def _prefilter(
             continue
 
         if candidate.is_degraded:
+            if candidate.degraded_reason == "book_missing_side":
+                rejected_one_sided_book += 1
+                rejected.append((candidate, "one_sided_book"))
+                continue
             degraded_books += 1
             degraded.append(candidate)
             continue
@@ -299,6 +306,7 @@ def _prefilter(
         rejected_inactive=rejected_inactive,
         rejected_low_liquidity=rejected_low_liquidity,
         rejected_wide_spread=rejected_wide_spread,
+        rejected_one_sided_book=rejected_one_sided_book,
         rejected_duplicate=rejected_duplicate,
         degraded_books=degraded_books,
     )
@@ -325,6 +333,7 @@ def _dry_outcome() -> ScanOutcome:
             rejected_inactive=0,
             rejected_low_liquidity=0,
             rejected_wide_spread=0,
+            rejected_one_sided_book=0,
             rejected_duplicate=0,
             degraded_books=0,
         ),
