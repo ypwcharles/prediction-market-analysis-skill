@@ -190,11 +190,7 @@ def _build_anchor_stack(seed: AlertSeed, parsed: ParsedJudgment) -> dict[str, An
         "external_fair_cents",
     )
     if external_anchor_cents is None:
-        external_anchor_cents = (
-            seed.external_anchor_cents
-            if seed.external_anchor_cents is not None
-            else theoretical_fair_cents
-        )
+        external_anchor_cents = seed.external_anchor_cents
 
     execution_adjusted_fair_entry_cents = _resolve_numeric(
         archive_payload,

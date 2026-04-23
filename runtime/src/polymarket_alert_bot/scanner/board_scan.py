@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -53,6 +53,7 @@ class ScanCoverage:
     degraded_books: int
     sleeve_input_counts: dict[str, int]
     sleeve_shortlist_counts: dict[str, int]
+    external_anchor_degraded_reason: str | None = None
 
     @property
     def skipped(self) -> int:
@@ -150,9 +151,14 @@ def run_scan(
 
     status = RunStatus.CLEAN.value
     degraded_reason = None
+    degraded_reasons: list[str] = []
     if outcome.coverage.degraded_books > 0 and outcome.coverage.total_candidates > 0:
+        degraded_reasons.append("executable_checks_partial")
+    if outcome.coverage.external_anchor_degraded_reason:
+        degraded_reasons.append(outcome.coverage.external_anchor_degraded_reason)
+    if degraded_reasons:
         status = RunStatus.DEGRADED.value
-        degraded_reason = "executable_checks_partial"
+        degraded_reason = "; ".join(degraded_reasons)
 
     alert_seeds = _build_alert_seeds(
         run_id,
@@ -268,22 +274,34 @@ def _run_live_scan(config: RuntimeConfig) -> ScanOutcome:
                 continue
             books_by_token[token_id] = _fetch_live_book(token_id, config.clob_book_url)
     candidates: Sequence[ScanCandidate] = normalize_candidates(events, books_by_token)
+    external_anchor_rows, external_anchor_degraded_reason = _load_external_anchor_rows(config)
     candidates = _apply_external_anchor_payload(
         candidates,
-        _load_external_anchor_rows(config),
+        external_anchor_rows,
         min_gap_cents=config.external_anchor_min_gap_cents,
     )
-    return _prefilter(events, candidates)
+    outcome = _prefilter(events, candidates)
+    if external_anchor_degraded_reason is None:
+        return outcome
+    return ScanOutcome(
+        coverage=replace(
+            outcome.coverage,
+            external_anchor_degraded_reason=external_anchor_degraded_reason,
+        ),
+        tradable=outcome.tradable,
+        degraded=outcome.degraded,
+        rejected=outcome.rejected,
+    )
 
 
-def _load_external_anchor_rows(config: RuntimeConfig) -> list[dict[str, object]]:
+def _load_external_anchor_rows(config: RuntimeConfig) -> tuple[list[dict[str, object]], str | None]:
     source = config.external_anchor_feed_url or config.external_anchor_samples_path
     if source is None:
-        return []
+        return [], None
     try:
-        return load_feed_rows(source)
-    except Exception:
-        return []
+        return load_feed_rows(source), None
+    except Exception as exc:
+        return [], f"external_anchor_feed_failed:{exc.__class__.__name__}"
 
 
 def _apply_external_anchor_payload(
