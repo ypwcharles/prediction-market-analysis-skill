@@ -72,8 +72,23 @@ The compose file mounts a persistent named volume to `/app/.runtime-data`, so SQ
 - `POLYMARKET_ALERT_BOT_X_FEED_URL`
 - `POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH`
 - `POLYMARKET_ALERT_BOT_X_SAMPLES_PATH`
+- `POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_FEED_URL`
+- `POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_SAMPLES_PATH`
+- `POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_MIN_GAP_CENTS` (default `5`; candidates only earn the `anchor_gap` scan sleeve when the absolute gap meets or exceeds this threshold)
 - `TELEGRAM_BOT_TOKEN`
 - `POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM`
+
+## Scan Discovery Behavior
+
+When `POLYMARKET_ALERT_BOT_ENABLE_SCAN=1`, `scan` no longer acts as a single hot-board sampler. It builds a multi-sleeve discovery universe before spending judgment budget:
+
+- `hot_board` from high-volume Gamma markets
+- `short_dated` from near-deadline Gamma markets
+- `newly_listed` from recently created Gamma markets
+- `family_inconsistency` when same-event family or price-surface checks flag structural issues
+- `anchor_gap` when configured external-anchor data disagrees with the executable market price by at least `POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_MIN_GAP_CENTS`
+
+The scanner records per-sleeve input, shortlist, and promoted counts in the `runs` table and heartbeat artifacts. Ranking favors conservative executable edge signals, including family structure, catalyst proximity, fill quality, uniqueness, external-anchor gap, crowding penalties, overlap penalties, and category execution haircuts. The judgment budget is still bounded by `POLYMARKET_ALERT_BOT_SCAN_MAX_JUDGMENT_CANDIDATES`.
 
 ## Evidence Feed Contract
 
@@ -97,6 +112,62 @@ The compose file mounts a persistent named volume to `/app/.runtime-data`, so SQ
 - X feed rows are filtered against the allowlisted handles in `runtime/config/sources.toml`.
 - If no live feed URL is configured, runtime falls back to the corresponding `*_SAMPLES_PATH` when provided.
 - If a configured feed cannot be loaded, the scan run is marked `degraded` and high-priority alerts are downgraded to `STRICT-DEGRADED`.
+
+Evidence rows may include optional claim-graph fields:
+
+- `claim_slot`, such as `settlement_claim`, `timing_gate`, `counter_claim`, or `external_anchor`
+- `claim_key`, a normalized identifier for the underlying claim
+
+When those fields are absent, the runtime infers claim slots and keys from the snippet, source kind, and URL. Strict promotion depends on independent corroboration of underlying claims rather than duplicated copies of the same report.
+
+## External Anchor Contract
+
+External anchors are optional configured rows that represent non-Polymarket fair-value references, such as another venue, model, bookmaker, or curated operator feed. Configure one of:
+
+- `POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_FEED_URL`
+- `POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_SAMPLES_PATH`
+
+Expected payload shape is a JSON list of objects. A row must include one probability field and at least one market identity field.
+
+Supported probability fields:
+
+- `external_anchor_cents`
+- `external_probability_cents`
+- `external_fair_cents`
+- `anchor_cents`
+- `anchor_probability_cents`
+- `probability_cents`
+- `fair_cents`
+
+Supported market identity fields include:
+
+- `condition_id`
+- `market_id`
+- `token_id`
+- `expression_key`
+- `event_slug` plus `market_slug`
+
+Optional provenance fields include `source_id` and `url`. If a configured external-anchor feed cannot be loaded, the scan is marked `degraded`; it is not silently treated as a clean no-anchor run. Runtime payloads keep `external_anchor_cents` separate from internally inferred fair value, so reports can distinguish market price, external anchor, rule-adjusted payout probability, and execution-adjusted fair entry.
+
+## Report Scorecard
+
+`uv run polymarket-alert-bot report` writes a markdown report under `.runtime-data/reports/` and inserts a row into `calibration_reports`. In addition to the original high-priority alert and review-window scorecard, reports now include:
+
+- `Discovery Health`: scan run count, degraded scan rate, latest scan events/contracts/shortlist/promoted, total scanned/shortlisted/promoted counts, structural-flag families/candidates, strict/research/skipped totals, retrieved shortlist count, and sleeve input/shortlist/promoted totals.
+- `Operator Trust Signals`: stale alerts, total feedback events, claimed-buy feedback, disagree feedback as a false-positive proxy, close-thesis feedback, and average feedback latency.
+
+The report is read-only over existing SQLite artifacts. It does not rerun scan, monitor, or live upstream fetches.
+
+## Alert Artifact Semantics
+
+Strict and research artifacts expose richer scan context:
+
+- family summaries and structural flags explain why a contract was selected relative to nearby expressions
+- ranking summaries list the positive and negative contributors used before judgment
+- anchor stacks keep market price, external anchor, rule-adjusted payout probability, execution-adjusted fair entry, and edge layers separate
+- citations render claim-aware support instead of a flat source dump
+
+Treat `external_anchor_cents` as real external data only when configured anchor rows supplied it. Internal model or rule-adjusted fair value must remain in the rule/fair-entry layers, not in the external-anchor layer.
 
 ## Data Paths
 
