@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -16,11 +16,13 @@ from polymarket_alert_bot.scanner.clob_client import (
     degraded_snapshot,
     fetch_book,
 )
+from polymarket_alert_bot.scanner.external_anchors import apply_external_anchors
 from polymarket_alert_bot.scanner.family import CandidateFamilySummary
 from polymarket_alert_bot.scanner.gamma_client import fetch_events, normalize_events
 from polymarket_alert_bot.scanner.market_link import build_polymarket_market_url
 from polymarket_alert_bot.scanner.normalizer import ScanCandidate, normalize_candidates
 from polymarket_alert_bot.scanner.ranking import build_ranking_summary, select_judgment_candidates
+from polymarket_alert_bot.sources.feed_loader import load_feed_rows
 from polymarket_alert_bot.storage.db import connect_db
 from polymarket_alert_bot.storage.migrations import apply_migrations
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
@@ -49,6 +51,9 @@ class ScanCoverage:
     rejected_one_sided_book: int
     rejected_duplicate: int
     degraded_books: int
+    sleeve_input_counts: dict[str, int]
+    sleeve_shortlist_counts: dict[str, int]
+    external_anchor_degraded_reason: str | None = None
 
     @property
     def skipped(self) -> int:
@@ -103,6 +108,13 @@ class AlertSeed:
     ranking_summary: dict[str, Any]
     judgment_seed: dict[str, Any] | None
     evidence_seeds: tuple[dict[str, Any], ...]
+    scan_sleeves: tuple[str, ...] = ()
+    volume_24h_usd: float | None = None
+    created_at: str | None = None
+    external_anchor_cents: float | None = None
+    external_anchor_source_id: str | None = None
+    external_anchor_url: str | None = None
+    external_anchor_gap_cents: float | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +133,7 @@ def run_scan(
     clob_payload: Mapping[str, Any] | Sequence[Any] | None = None,
     judgment_seed_inputs: Mapping[str, object] | None = None,
     evidence_seed_inputs: Mapping[str, object] | None = None,
+    external_anchor_payload: Sequence[Mapping[str, object]] | None = None,
     max_judgment_candidates: int | None = None,
 ) -> ScanRunResult:
     timestamp = datetime.now(UTC).isoformat()
@@ -128,15 +141,24 @@ def run_scan(
 
     outcome = _dry_outcome()
     if gamma_payload is not None:
-        outcome = scan_board(gamma_payload, clob_payload or {"books": []})
+        outcome = scan_board(
+            gamma_payload,
+            clob_payload or {"books": []},
+            external_anchor_payload=external_anchor_payload,
+        )
     elif os.environ.get("POLYMARKET_ALERT_BOT_ENABLE_SCAN") == "1":
         outcome = _run_live_scan(load_runtime_config())
 
     status = RunStatus.CLEAN.value
     degraded_reason = None
+    degraded_reasons: list[str] = []
     if outcome.coverage.degraded_books > 0 and outcome.coverage.total_candidates > 0:
+        degraded_reasons.append("executable_checks_partial")
+    if outcome.coverage.external_anchor_degraded_reason:
+        degraded_reasons.append(outcome.coverage.external_anchor_degraded_reason)
+    if degraded_reasons:
         status = RunStatus.DEGRADED.value
-        degraded_reason = "executable_checks_partial"
+        degraded_reason = "; ".join(degraded_reasons)
 
     alert_seeds = _build_alert_seeds(
         run_id,
@@ -170,6 +192,18 @@ def run_scan(
             "missing_outcome_candidates": outcome.coverage.missing_outcome_candidates,
             "missing_family_context_candidates": outcome.coverage.missing_family_context_candidates,
             "rejection_reasons_json": _serialize_rejection_reasons(outcome.rejected),
+            "sleeve_input_counts_json": json.dumps(
+                outcome.coverage.sleeve_input_counts,
+                sort_keys=True,
+            ),
+            "sleeve_shortlist_counts_json": json.dumps(
+                outcome.coverage.sleeve_shortlist_counts,
+                sort_keys=True,
+            ),
+            "sleeve_promoted_counts_json": json.dumps(
+                count_seed_sleeves(alert_seeds),
+                sort_keys=True,
+            ),
             "strict_count": len(outcome.tradable),
             "research_count": len(outcome.degraded),
             "skipped_count": outcome.coverage.skipped,
@@ -190,15 +224,42 @@ def run_scan(
 def scan_board(
     gamma_payload: Sequence[dict[str, Any]],
     clob_payload: Mapping[str, Any] | Sequence[Any],
+    *,
+    external_anchor_payload: Sequence[Mapping[str, object]] | None = None,
+    external_anchor_min_gap_cents: float = 5.0,
 ) -> ScanOutcome:
     events = normalize_events(gamma_payload)
-    candidates = normalize_candidates(events, build_book_snapshots(clob_payload))
+    candidates: Sequence[ScanCandidate] = normalize_candidates(
+        events,
+        build_book_snapshots(clob_payload),
+    )
+    candidates = _apply_external_anchor_payload(
+        candidates,
+        external_anchor_payload,
+        min_gap_cents=external_anchor_min_gap_cents,
+    )
     return _prefilter(events, candidates)
 
 
 def _run_live_scan(config: RuntimeConfig) -> ScanOutcome:
     gamma_limit = max(config.gamma_limit, 1)
-    raw_events = _fetch_live_events(config.gamma_events_url, gamma_limit)
+    raw_events: list[dict[str, Any]] = []
+    for sleeve, order, ascending in (
+        ("hot_board", "volume24hr", False),
+        ("short_dated", "endDate", True),
+        ("newly_listed", "createdAt", False),
+    ):
+        raw_events.extend(
+            _tag_scan_sleeve(
+                _fetch_live_events(
+                    config.gamma_events_url,
+                    gamma_limit,
+                    order=order,
+                    ascending=ascending,
+                ),
+                sleeve=sleeve,
+            )
+        )
     events = normalize_events(raw_events)
     books_by_token: dict[str, BookSnapshot] = {}
     for event in events:
@@ -212,17 +273,72 @@ def _run_live_scan(config: RuntimeConfig) -> ScanOutcome:
             if not isinstance(token_id, str) or token_id in books_by_token:
                 continue
             books_by_token[token_id] = _fetch_live_book(token_id, config.clob_book_url)
-    candidates = normalize_candidates(events, books_by_token)
-    return _prefilter(events, candidates)
+    candidates: Sequence[ScanCandidate] = normalize_candidates(events, books_by_token)
+    external_anchor_rows, external_anchor_degraded_reason = _load_external_anchor_rows(config)
+    candidates = _apply_external_anchor_payload(
+        candidates,
+        external_anchor_rows,
+        min_gap_cents=config.external_anchor_min_gap_cents,
+    )
+    outcome = _prefilter(events, candidates)
+    if external_anchor_degraded_reason is None:
+        return outcome
+    return ScanOutcome(
+        coverage=replace(
+            outcome.coverage,
+            external_anchor_degraded_reason=external_anchor_degraded_reason,
+        ),
+        tradable=outcome.tradable,
+        degraded=outcome.degraded,
+        rejected=outcome.rejected,
+    )
 
 
-def _fetch_live_events(url: str, limit: int) -> list[dict[str, Any]]:
+def _load_external_anchor_rows(config: RuntimeConfig) -> tuple[list[dict[str, object]], str | None]:
+    source = config.external_anchor_feed_url or config.external_anchor_samples_path
+    if source is None:
+        return [], None
     try:
-        return fetch_events(url=url, limit=limit, active=True, closed=False)
+        return load_feed_rows(source), None
+    except Exception as exc:
+        return [], f"external_anchor_feed_failed:{exc.__class__.__name__}"
+
+
+def _apply_external_anchor_payload(
+    candidates: Sequence[ScanCandidate],
+    external_anchor_payload: Sequence[Mapping[str, object]] | None,
+    *,
+    min_gap_cents: float,
+) -> tuple[ScanCandidate, ...]:
+    if not external_anchor_payload:
+        return tuple(candidates)
+    return apply_external_anchors(
+        candidates,
+        external_anchor_payload,
+        min_gap_cents=min_gap_cents,
+    )
+
+
+def _fetch_live_events(
+    url: str,
+    limit: int,
+    *,
+    order: str,
+    ascending: bool,
+) -> list[dict[str, Any]]:
+    try:
+        return fetch_events(
+            url=url,
+            limit=limit,
+            active=True,
+            closed=False,
+            order=order,
+            ascending=ascending,
+        )
     except TypeError:
         # Support simplified monkeypatch stubs in tests.
         try:
-            return fetch_events(url=url, limit=limit)
+            return fetch_events(url=url, limit=limit, active=True, closed=False)
         except TypeError:
             return fetch_events()
 
@@ -328,6 +444,8 @@ def _prefilter(
         rejected_one_sided_book=rejected_one_sided_book,
         rejected_duplicate=rejected_duplicate,
         degraded_books=degraded_books,
+        sleeve_input_counts=_count_candidate_sleeves(candidates),
+        sleeve_shortlist_counts=_count_candidate_sleeves((*tradable, *degraded)),
     )
     return ScanOutcome(
         coverage=coverage,
@@ -358,6 +476,8 @@ def _dry_outcome() -> ScanOutcome:
             rejected_one_sided_book=0,
             rejected_duplicate=0,
             degraded_books=0,
+            sleeve_input_counts={},
+            sleeve_shortlist_counts={},
         ),
         tradable=(),
         degraded=(),
@@ -430,6 +550,13 @@ def _build_alert_seeds(
                 ranking_summary=build_ranking_summary(candidate).as_dict(),
                 judgment_seed=judgment_seed,
                 evidence_seeds=evidence_seeds,
+                scan_sleeves=candidate.scan_sleeves,
+                volume_24h_usd=candidate.volume_24h_usd,
+                created_at=candidate.created_at,
+                external_anchor_cents=candidate.external_anchor_cents,
+                external_anchor_source_id=candidate.external_anchor_source_id,
+                external_anchor_url=candidate.external_anchor_url,
+                external_anchor_gap_cents=candidate.external_anchor_gap_cents,
             )
         )
     return tuple(seeds)
@@ -519,3 +646,61 @@ def _serialize_rejection_reasons(rejected: Sequence[tuple[ScanCandidate, str]]) 
             }
         )
     return json.dumps(payload, sort_keys=True)
+
+
+def _tag_scan_sleeve(raw_events: Sequence[dict[str, Any]], *, sleeve: str) -> list[dict[str, Any]]:
+    tagged: list[dict[str, Any]] = []
+    for raw_event in raw_events:
+        event = dict(raw_event)
+        event["_scan_sleeves"] = _merge_sleeves(event.get("_scan_sleeves"), sleeve)
+        raw_markets = event.get("markets")
+        if isinstance(raw_markets, list):
+            markets: list[dict[str, Any]] = []
+            for raw_market in raw_markets:
+                if not isinstance(raw_market, dict):
+                    continue
+                market = dict(raw_market)
+                market["_scan_sleeves"] = _merge_sleeves(market.get("_scan_sleeves"), sleeve)
+                markets.append(market)
+            event["markets"] = markets
+        tagged.append(event)
+    return tagged
+
+
+def _merge_sleeves(existing: object, sleeve: str) -> tuple[str, ...]:
+    sleeves: list[str] = []
+    if isinstance(existing, (list, tuple)):
+        for raw_sleeve in existing:
+            value = str(raw_sleeve).strip()
+            if value and value not in sleeves:
+                sleeves.append(value)
+    if sleeve not in sleeves:
+        sleeves.append(sleeve)
+    return tuple(sleeves)
+
+
+def _count_candidate_sleeves(candidates: Sequence[ScanCandidate]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for sleeve in (
+        "hot_board",
+        "short_dated",
+        "newly_listed",
+        "family_inconsistency",
+        "anchor_gap",
+        "unassigned",
+    ):
+        counts[sleeve] = 0
+    for candidate in candidates:
+        sleeves = candidate.scan_sleeves or ("unassigned",)
+        for sleeve in sleeves:
+            counts[sleeve] = counts.get(sleeve, 0) + 1
+    return {key: value for key, value in counts.items() if value > 0}
+
+
+def count_seed_sleeves(alert_seeds: Sequence[AlertSeed]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for seed in alert_seeds:
+        sleeves = seed.scan_sleeves or ("unassigned",)
+        for sleeve in sleeves:
+            counts[sleeve] = counts.get(sleeve, 0) + 1
+    return counts

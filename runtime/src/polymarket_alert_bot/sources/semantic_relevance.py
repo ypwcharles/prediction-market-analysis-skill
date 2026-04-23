@@ -30,6 +30,8 @@ class SemanticEvidenceDecision(BaseModel):
     source_id: str | None = None
     url: str | None = None
     claim_snippet: str | None = None
+    claim_slot: str | None = None
+    claim_key: str | None = None
     keep: bool | None = None
     conflict_status: str | None = None
     reason: str | None = None
@@ -209,6 +211,9 @@ class SemanticRelevanceAdapter:
                         "fetched_at": item.fetched_at,
                         "url": item.url,
                         "claim_snippet": item.claim_snippet,
+                        "claim_slot": item.claim_slot,
+                        "claim_key": item.claim_key,
+                        "independent_key": item.independent_key,
                         "tier": item.tier,
                         "conflict_status": item.conflict_status,
                     }
@@ -299,6 +304,7 @@ def _apply_decisions(
 ) -> tuple[EvidenceItem, ...]:
     decisions_by_key: dict[tuple[str | None, str | None, str | None], SemanticEvidenceDecision] = {}
     decisions_by_url_claim: dict[tuple[str, str], SemanticEvidenceDecision] = {}
+    decisions_by_claim_key: dict[str, SemanticEvidenceDecision] = {}
     decisions_by_url: dict[str, SemanticEvidenceDecision] = {}
     decisions_by_source_id: dict[str, SemanticEvidenceDecision] = {}
     for parsed_decision in parsed.decisions:
@@ -309,6 +315,8 @@ def _apply_decisions(
                 (parsed_decision.url, parsed_decision.claim_snippet),
                 parsed_decision,
             )
+        if parsed_decision.claim_key:
+            decisions_by_claim_key.setdefault(parsed_decision.claim_key, parsed_decision)
         if parsed_decision.url:
             decisions_by_url.setdefault(parsed_decision.url, parsed_decision)
         if parsed_decision.source_id:
@@ -324,6 +332,7 @@ def _apply_decisions(
             item,
             decisions_by_key=decisions_by_key,
             decisions_by_url_claim=decisions_by_url_claim,
+            decisions_by_claim_key=decisions_by_claim_key,
             decisions_by_url=decisions_by_url,
             decisions_by_source_id=decisions_by_source_id,
         )
@@ -356,6 +365,9 @@ def _apply_decisions(
                 claim_snippet=item.claim_snippet,
                 tier=item.tier,
                 conflict_status=conflict_status,
+                claim_slot=item.claim_slot,
+                claim_key=item.claim_key,
+                independent_key=item.independent_key,
             )
         )
     return tuple(filtered)
@@ -366,6 +378,7 @@ def _match_decision(
     *,
     decisions_by_key: dict[tuple[str | None, str | None, str | None], SemanticEvidenceDecision],
     decisions_by_url_claim: dict[tuple[str, str], SemanticEvidenceDecision],
+    decisions_by_claim_key: dict[str, SemanticEvidenceDecision],
     decisions_by_url: dict[str, SemanticEvidenceDecision],
     decisions_by_source_id: dict[str, SemanticEvidenceDecision],
 ) -> SemanticEvidenceDecision | None:
@@ -377,6 +390,11 @@ def _match_decision(
         url_claim_match = decisions_by_url_claim.get((item.url, item.claim_snippet))
         if url_claim_match is not None:
             return url_claim_match
+
+    if item.claim_key:
+        claim_key_match = decisions_by_claim_key.get(item.claim_key)
+        if claim_key_match is not None:
+            return claim_key_match
 
     source_id_match = decisions_by_source_id.get(item.source_id)
     if source_id_match is not None:

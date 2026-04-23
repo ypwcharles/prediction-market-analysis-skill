@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -31,7 +32,7 @@ from polymarket_alert_bot.flows.shared import (
 from polymarket_alert_bot.judgment.context_builder import build_judgment_context
 from polymarket_alert_bot.judgment.result_parser import ParsedJudgment
 from polymarket_alert_bot.judgment.skill_adapter import SkillAdapter
-from polymarket_alert_bot.scanner.board_scan import AlertSeed, run_scan
+from polymarket_alert_bot.scanner.board_scan import AlertSeed, count_seed_sleeves, run_scan
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem, enrich_evidence
 from polymarket_alert_bot.sources.semantic_relevance import SemanticRelevanceAdapter
 from polymarket_alert_bot.sources.shortlist_retrieval import (
@@ -90,6 +91,7 @@ def execute_scan_flow(
     retrieved_shortlist_candidates = 0
     retrieval_degraded = False
     semantic_relevance_degraded = False
+    promoted_sleeve_counts = count_seed_sleeves(scan_result.alert_seeds)
 
     for seed in scan_result.alert_seeds:
         seed_now = _now_iso()
@@ -238,6 +240,9 @@ def execute_scan_flow(
                 "strict_count": len(strict_alert_ids),
                 "research_count": len(research_alert_ids),
                 "skipped_count": scan_result.outcome.coverage.skipped,
+                "sleeve_input_counts": scan_result.outcome.coverage.sleeve_input_counts,
+                "sleeve_shortlist_counts": scan_result.outcome.coverage.sleeve_shortlist_counts,
+                "sleeve_promoted_counts": promoted_sleeve_counts,
                 "degraded": scan_result.status == "degraded" or run_evidence_degraded,
                 "degraded_reason": combined_degraded_reason,
             }
@@ -283,6 +288,7 @@ def execute_scan_flow(
             skipped_count = ?,
             retrieved_shortlist_candidates = ?,
             promoted_seed_count = ?,
+            sleeve_promoted_counts_json = ?,
             heartbeat_sent = ?,
             finished_at = ?,
             degraded_reason = ?,
@@ -295,6 +301,7 @@ def execute_scan_flow(
             scan_result.outcome.coverage.skipped,
             retrieved_shortlist_candidates,
             len(strict_alert_ids) + len(research_alert_ids),
+            json.dumps(promoted_sleeve_counts, sort_keys=True),
             1 if heartbeat_alert_id else 0,
             _now_iso(),
             combined_degraded_reason,

@@ -35,6 +35,13 @@ class ScanCandidate:
     expression_key: str
     rules_text: str | None
     family_summary: CandidateFamilySummary
+    volume_24h_usd: float | None = None
+    created_at: str | None = None
+    scan_sleeves: tuple[str, ...] = ()
+    external_anchor_cents: float | None = None
+    external_anchor_source_id: str | None = None
+    external_anchor_url: str | None = None
+    external_anchor_gap_cents: float | None = None
 
 
 def normalize_candidates(
@@ -50,6 +57,7 @@ def normalize_candidates(
         event_title = _optional_str(event.get("title"))
         event_category = _optional_str(event.get("category"))
         event_end_time = _optional_str(event.get("end_time"))
+        event_created_at = _optional_str(event.get("created_at"))
         event_rules_text = _optional_str(event.get("rules_text"))
         raw_markets = event.get("markets")
         if not isinstance(raw_markets, list):
@@ -70,7 +78,9 @@ def normalize_candidates(
             active = bool(market.get("active", False))
             market_slug = _optional_str(market.get("slug"))
             liquidity_usd = _to_float(market.get("liquidity_usd"))
+            volume_24h_usd = _to_float(market.get("volume_24h_usd"))
             rules_text = _optional_str(market.get("rules_text")) or event_rules_text
+            created_at = _optional_str(market.get("created_at")) or event_created_at
 
             snapshot = books_by_token.get(token_id)
             if snapshot is None:
@@ -78,6 +88,11 @@ def normalize_candidates(
             expression_summary = _build_expression_summary(question, market_slug)
             expression_key = _build_expression_key(event_id, event_slug, expression_summary)
             family_summary = build_family_summary(event, focus_market_id=market_id)
+            scan_sleeves = _resolve_scan_sleeves(
+                event=event,
+                market=market,
+                family_summary=family_summary,
+            )
 
             candidates.append(
                 ScanCandidate(
@@ -107,6 +122,9 @@ def normalize_candidates(
                     expression_key=expression_key,
                     rules_text=rules_text,
                     family_summary=family_summary,
+                    volume_24h_usd=volume_24h_usd,
+                    created_at=created_at,
+                    scan_sleeves=scan_sleeves,
                 )
             )
     return candidates
@@ -167,3 +185,24 @@ def _mid_cents(snapshot: BookSnapshot) -> float | None:
     if snapshot.best_bid is None or snapshot.best_ask is None:
         return None
     return _to_cents((snapshot.best_bid + snapshot.best_ask) / 2.0)
+
+
+def _resolve_scan_sleeves(
+    *,
+    event: Mapping[str, object],
+    market: Mapping[str, object],
+    family_summary: CandidateFamilySummary,
+) -> tuple[str, ...]:
+    sleeves: list[str] = []
+    for container in (event.get("scan_sleeves"), market.get("scan_sleeves")):
+        if not isinstance(container, (list, tuple)):
+            continue
+        for raw_sleeve in container:
+            sleeve = _optional_str(raw_sleeve)
+            if sleeve and sleeve not in sleeves:
+                sleeves.append(sleeve)
+    if family_summary.structural_flag_count > 0 and "family_inconsistency" not in sleeves:
+        sleeves.append("family_inconsistency")
+    if not sleeves:
+        sleeves.append("unassigned")
+    return tuple(sleeves)

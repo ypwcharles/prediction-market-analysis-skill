@@ -40,6 +40,9 @@ class RuntimeConfig:
     x_feed_url: str | None
     news_samples_path: Path | None
     x_samples_path: Path | None
+    external_anchor_feed_url: str | None
+    external_anchor_samples_path: Path | None
+    external_anchor_min_gap_cents: float
     service_host: str
     service_port: int
     service_enable_scheduler: bool
@@ -135,6 +138,13 @@ def load_runtime_config() -> RuntimeConfig:
         x_feed_url=_optional_env("POLYMARKET_ALERT_BOT_X_FEED_URL"),
         news_samples_path=_optional_path("POLYMARKET_ALERT_BOT_NEWS_SAMPLES_PATH"),
         x_samples_path=_optional_path("POLYMARKET_ALERT_BOT_X_SAMPLES_PATH"),
+        external_anchor_feed_url=_optional_env("POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_FEED_URL"),
+        external_anchor_samples_path=_optional_path(
+            "POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_SAMPLES_PATH"
+        ),
+        external_anchor_min_gap_cents=float(
+            os.environ.get("POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_MIN_GAP_CENTS", "5")
+        ),
         service_host=os.environ.get(
             "POLYMARKET_ALERT_BOT_SERVICE_HOST",
             os.environ.get("POLYMARKET_ALERT_BOT_HOST", "0.0.0.0"),

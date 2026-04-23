@@ -6,6 +6,24 @@ action: NO <= 42.0c | size 250 USDC | edge 13.4c
 why now: Orderbook skew widened after single-source reposts, while tiered evidence has not confirmed escalation.
 kill criteria: Exit if primary sources confirm direct US strike authorization or if YES re-prices below edge floor.
 timers: fresh_until=2026-04-17T14:30:00Z | recheck=2026-04-17T12:00:00Z
+anchor stack:
+market price anchor: 42.0c
+external anchor: 58.5c
+rule-adjusted payout: 55.4c
+execution-adjusted fair entry: 42.0c
+anchor gap: 16.5c
+execution haircut: 13.4c
+execution overlay:
+alpha type: structure
+execution style: maker_bias
+primary sleeve: family_inconsistency
+sleeves: hot_board, family_inconsistency
+fill probability score: 71.2
+crowding penalty: 12.5
+overlap penalty: 4.0
+category execution haircut: 1.2c
+top factors: structural edge proxy, fill probability
+top penalties: crowding penalty
 citations (claim-aware):
 1. Defense officials said no strike order has been issued.
    -> Reuters (primary)

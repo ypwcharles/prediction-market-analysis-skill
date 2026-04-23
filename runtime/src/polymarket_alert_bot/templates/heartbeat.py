@@ -22,6 +22,28 @@ def _resolve(payload: Mapping[str, Any], archive_payload: Mapping[str, Any], key
     return archive_payload.get(key)
 
 
+def _render_sleeve_counts(counts: Mapping[str, Any]) -> str:
+    ordered = [
+        "hot_board",
+        "short_dated",
+        "newly_listed",
+        "family_inconsistency",
+        "anchor_gap",
+        "unassigned",
+    ]
+    parts: list[str] = []
+    for sleeve in ordered:
+        value = counts.get(sleeve)
+        if value in (None, 0, "0"):
+            continue
+        parts.append(f"{sleeve}={value}")
+    for sleeve, value in counts.items():
+        if sleeve in ordered or value in (None, 0, "0"):
+            continue
+        parts.append(f"{sleeve}={value}")
+    return " | ".join(parts) if parts else "-"
+
+
 def render_heartbeat(payload: Mapping[str, Any]) -> str:
     archive_payload = _as_mapping(payload.get("archive_payload"))
     counts = _as_mapping(archive_payload.get("counts"))
@@ -40,6 +62,16 @@ def render_heartbeat(payload: Mapping[str, Any]) -> str:
     strict_count = _resolve(payload, counts, "strict_count")
     research_count = _resolve(payload, counts, "research_count")
     skipped_count = _resolve(payload, counts, "skipped_count")
+    sleeve_input_counts = _as_mapping(
+        _resolve(payload, counts, "sleeve_input_counts") or payload.get("sleeve_input_counts")
+    )
+    sleeve_shortlist_counts = _as_mapping(
+        _resolve(payload, counts, "sleeve_shortlist_counts")
+        or payload.get("sleeve_shortlist_counts")
+    )
+    sleeve_promoted_counts = _as_mapping(
+        _resolve(payload, counts, "sleeve_promoted_counts") or payload.get("sleeve_promoted_counts")
+    )
     degraded_reason = (
         payload.get("degraded_reason")
         or archive_payload.get("degraded_reason")
@@ -60,6 +92,9 @@ def render_heartbeat(payload: Mapping[str, Any]) -> str:
             f"{_as_text(scanned_families)}/{_as_text(families_with_structural_flags)}/"
             f"{_as_text(structurally_flagged_candidates)}",
             f"strict/research/skipped: {_as_text(strict_count)}/{_as_text(research_count)}/{_as_text(skipped_count)}",
+            f"sleeves input: {_render_sleeve_counts(sleeve_input_counts)}",
+            f"sleeves shortlist: {_render_sleeve_counts(sleeve_shortlist_counts)}",
+            f"sleeves promoted: {_render_sleeve_counts(sleeve_promoted_counts)}",
             f"reason: {_as_text(degraded_reason)}",
         ]
     )

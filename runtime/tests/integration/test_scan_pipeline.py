@@ -274,6 +274,67 @@ def test_run_scan_live_uses_runtime_config_urls_and_limit(monkeypatch, tmp_path)
     assert result.outcome.coverage.degraded_books == 2
 
 
+def test_run_scan_live_marks_external_anchor_source_failure_as_degraded(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ENABLE_SCAN", "1")
+    monkeypatch.setenv(
+        "POLYMARKET_ALERT_BOT_EXTERNAL_ANCHOR_SAMPLES_PATH",
+        str(tmp_path / "missing-anchors.json"),
+    )
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+
+    gamma_payload = _read_json("gamma_live_board.json")
+
+    def _fake_fetch_events(
+        *,
+        url: str,
+        limit: int,
+        active: bool = True,
+        closed: bool = False,
+        order: str = "volume24hr",
+        ascending: bool = False,
+    ):
+        assert active is True
+        assert closed is False
+        assert order in {"volume24hr", "endDate", "createdAt"}
+        assert isinstance(ascending, bool)
+        return gamma_payload
+
+    def _fake_fetch_book(token_id: str, *, url: str) -> BookSnapshot:
+        return BookSnapshot(
+            token_id=token_id,
+            best_bid=0.48,
+            best_ask=0.50,
+            spread_bps=400.0,
+            slippage_bps=200.0,
+            is_degraded=False,
+            degraded_reason=None,
+        )
+
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_events", _fake_fetch_events)
+    monkeypatch.setattr("polymarket_alert_bot.scanner.board_scan.fetch_book", _fake_fetch_book)
+
+    result = run_scan(paths)
+
+    assert result.status == "degraded"
+    assert result.degraded_reason == "external_anchor_feed_failed:FileNotFoundError"
+    assert (
+        result.outcome.coverage.external_anchor_degraded_reason
+        == "external_anchor_feed_failed:FileNotFoundError"
+    )
+
+    conn = connect_db(paths.db_path)
+    run_row = conn.execute(
+        "SELECT status, degraded_reason FROM runs WHERE id = ?",
+        [result.run_id],
+    ).fetchone()
+    assert dict(run_row) == {
+        "status": "degraded",
+        "degraded_reason": "external_anchor_feed_failed:FileNotFoundError",
+    }
+
+
 def test_run_scan_caps_judgment_candidates_by_priority(monkeypatch, tmp_path):
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
     paths = load_runtime_paths()
@@ -348,6 +409,100 @@ def test_run_scan_caps_judgment_candidates_by_priority(monkeypatch, tmp_path):
     }
 
     assert result.alert_seeds[0].market_id == "market-high"
+
+
+def test_run_scan_promotes_external_anchor_gap_sleeve(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+
+    gamma_payload = [
+        {
+            "id": "event-anchor-gap",
+            "slug": "fed-cuts-anchor-gap",
+            "title": "Fed Rate Cut Anchor Gap",
+            "category": "Politics",
+            "endDate": "2026-06-01T00:00:00Z",
+            "markets": [
+                {
+                    "id": "market-anchor",
+                    "slug": "fed-cut-by-june",
+                    "question": "Will the Fed cut rates by June?",
+                    "outcome": "YES",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-anchor",
+                    "liquidity": 5000,
+                    "lastTradePrice": 0.49,
+                    "token_id": "token-anchor",
+                },
+                {
+                    "id": "market-control",
+                    "slug": "celebrity-album",
+                    "question": "Will Celebrity A release an album by June?",
+                    "outcome": "YES",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-control",
+                    "liquidity": 15000,
+                    "lastTradePrice": 0.49,
+                    "token_id": "token-control",
+                },
+            ],
+        }
+    ]
+    clob_payload = {
+        "books": [
+            {
+                "token_id": "token-anchor",
+                "bids": [{"price": "0.48"}],
+                "asks": [{"price": "0.50"}],
+            },
+            {
+                "token_id": "token-control",
+                "bids": [{"price": "0.48"}],
+                "asks": [{"price": "0.50"}],
+            },
+        ]
+    }
+
+    result = run_scan(
+        paths,
+        gamma_payload=gamma_payload,
+        clob_payload=clob_payload,
+        external_anchor_payload=[
+            {
+                "condition_id": "cond-anchor",
+                "external_anchor_cents": 68.0,
+                "source_id": "kalshi-fed-proxy",
+                "url": "https://example.com/kalshi/fed-cut",
+            }
+        ],
+        max_judgment_candidates=1,
+    )
+
+    seed = result.alert_seeds[0]
+    assert seed.market_id == "market-anchor"
+    assert seed.external_anchor_cents == 68.0
+    assert seed.external_anchor_source_id == "kalshi-fed-proxy"
+    assert seed.external_anchor_url == "https://example.com/kalshi/fed-cut"
+    assert seed.external_anchor_gap_cents == 19.0
+    assert seed.scan_sleeves == ("anchor_gap",)
+    assert seed.ranking_summary["primary_scan_sleeve"] == "anchor_gap"
+    assert seed.ranking_summary["external_anchor_gap_score"] == 57.0
+
+    conn = connect_db(paths.db_path)
+    run_row = conn.execute(
+        """
+        SELECT sleeve_input_counts_json, sleeve_shortlist_counts_json, sleeve_promoted_counts_json
+        FROM runs
+        WHERE id = ?
+        """,
+        [result.run_id],
+    ).fetchone()
+    assert json.loads(run_row["sleeve_input_counts_json"])["anchor_gap"] == 1
+    assert json.loads(run_row["sleeve_shortlist_counts_json"])["anchor_gap"] == 1
+    assert json.loads(run_row["sleeve_promoted_counts_json"])["anchor_gap"] == 1
 
 
 def test_run_scan_prefers_structural_candidate_over_more_liquid_hot_board(monkeypatch, tmp_path):

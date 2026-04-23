@@ -13,7 +13,7 @@ from polymarket_alert_bot.delivery.telegram_client import TelegramClient, Telegr
 from polymarket_alert_bot.judgment.result_parser import ParsedJudgment, Trigger
 from polymarket_alert_bot.scanner.board_scan import AlertSeed
 from polymarket_alert_bot.scanner.market_link import build_polymarket_market_url
-from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
+from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem, evidence_claim_key
 from polymarket_alert_bot.sources.news_client import NewsClient
 from polymarket_alert_bot.sources.x_client import XClient
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
@@ -50,7 +50,7 @@ def _merge_evidence(
     retrieved_items: Iterable[EvidenceItem] = (),
 ) -> list[EvidenceItem]:
     merged: list[EvidenceItem] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str]] = set()
     seeded_items: list[EvidenceItem] = []
     for raw in seed.evidence_seeds:
         if "source_kind" not in raw:
@@ -64,11 +64,14 @@ def _merge_evidence(
                 claim_snippet=str(raw.get("claim_snippet") or raw.get("claim") or "seed evidence"),
                 tier=str(raw.get("tier") or ""),
                 conflict_status=str(raw["conflict_status"]) if raw.get("conflict_status") else None,
+                claim_slot=str(raw["claim_slot"]) if raw.get("claim_slot") else None,
+                claim_key=str(raw["claim_key"]) if raw.get("claim_key") else None,
+                independent_key=str(raw["independent_key"]) if raw.get("independent_key") else None,
             )
         )
     base_items = (*seeded_items, *configured_items, *retrieved_items)
     for item in base_items:
-        key = (item.source_id, item.url, item.claim_snippet)
+        key = evidence_claim_key(item)
         if key in seen:
             continue
         seen.add(key)
@@ -123,6 +126,8 @@ def _build_render_payload(
         event_slug=seed.event_slug,
         market_slug=seed.market_slug,
     )
+    anchor_stack = _build_anchor_stack(seed, parsed)
+    execution_overlay = _build_execution_overlay(seed)
     return {
         "mode": "STRICT-DEGRADED"
         if final_kind == "strict_degraded"
@@ -149,7 +154,113 @@ def _build_render_payload(
         "citations": [citation.model_dump(exclude_none=True) for citation in parsed.citations],
         "triggers": [trigger.model_dump(exclude_none=True) for trigger in parsed.triggers],
         "archive_payload": parsed.archive_payload,
+        "scan_sleeves": list(seed.scan_sleeves),
+        "anchor_stack": anchor_stack,
+        "execution_overlay": execution_overlay,
     }
+
+
+def _build_anchor_stack(seed: AlertSeed, parsed: ParsedJudgment) -> dict[str, Any]:
+    archive_payload = parsed.archive_payload if isinstance(parsed.archive_payload, dict) else {}
+    market_price_anchor_cents = (
+        _resolve_numeric(
+            archive_payload,
+            "market_price_anchor_cents",
+            "market_anchor_cents",
+        )
+        or parsed.max_entry_cents
+        or seed.best_ask_cents
+        or seed.mid_cents
+        or seed.last_price_cents
+    )
+    theoretical_fair_cents = _resolve_numeric(
+        archive_payload,
+        "rule_adjusted_payout_cents",
+        "rule_adjusted_probability_cents",
+        "theoretical_fair_cents",
+    )
+    if theoretical_fair_cents is None and parsed.theoretical_edge_cents is not None:
+        if market_price_anchor_cents is not None:
+            theoretical_fair_cents = market_price_anchor_cents + parsed.theoretical_edge_cents
+
+    external_anchor_cents = _resolve_numeric(
+        archive_payload,
+        "external_anchor_cents",
+        "external_probability_cents",
+        "external_fair_cents",
+    )
+    if external_anchor_cents is None:
+        external_anchor_cents = seed.external_anchor_cents
+
+    execution_adjusted_fair_entry_cents = _resolve_numeric(
+        archive_payload,
+        "execution_adjusted_fair_entry_cents",
+        "fair_entry_cents",
+    )
+    if execution_adjusted_fair_entry_cents is None:
+        execution_adjusted_fair_entry_cents = parsed.max_entry_cents
+
+    anchor_gap_cents = None
+    if seed.external_anchor_gap_cents is not None:
+        anchor_gap_cents = seed.external_anchor_gap_cents
+    elif external_anchor_cents is not None and market_price_anchor_cents is not None:
+        anchor_gap_cents = external_anchor_cents - market_price_anchor_cents
+    elif theoretical_fair_cents is not None and market_price_anchor_cents is not None:
+        anchor_gap_cents = theoretical_fair_cents - market_price_anchor_cents
+
+    execution_haircut_cents = _resolve_numeric(
+        archive_payload,
+        "execution_haircut_cents",
+    )
+    if execution_haircut_cents is None:
+        if theoretical_fair_cents is not None and execution_adjusted_fair_entry_cents is not None:
+            execution_haircut_cents = max(
+                0.0,
+                theoretical_fair_cents - execution_adjusted_fair_entry_cents,
+            )
+        elif parsed.theoretical_edge_cents is not None and parsed.executable_edge_cents is not None:
+            execution_haircut_cents = max(
+                0.0,
+                parsed.theoretical_edge_cents - parsed.executable_edge_cents,
+            )
+
+    return {
+        "market_price_anchor_cents": market_price_anchor_cents,
+        "external_anchor_cents": external_anchor_cents,
+        "rule_adjusted_payout_cents": theoretical_fair_cents,
+        "execution_adjusted_fair_entry_cents": execution_adjusted_fair_entry_cents,
+        "anchor_gap_cents": anchor_gap_cents,
+        "execution_haircut_cents": execution_haircut_cents,
+    }
+
+
+def _build_execution_overlay(seed: AlertSeed) -> dict[str, Any]:
+    ranking_summary = seed.ranking_summary if isinstance(seed.ranking_summary, dict) else {}
+    return {
+        "alpha_type": ranking_summary.get("alpha_type"),
+        "execution_style": ranking_summary.get("execution_style"),
+        "primary_scan_sleeve": ranking_summary.get("primary_scan_sleeve"),
+        "scan_sleeves": ranking_summary.get("scan_sleeves") or list(seed.scan_sleeves),
+        "external_anchor_gap_score": ranking_summary.get("external_anchor_gap_score"),
+        "fill_probability_score": ranking_summary.get("fill_probability_score"),
+        "crowding_penalty": ranking_summary.get("crowding_penalty"),
+        "overlap_penalty": ranking_summary.get("overlap_penalty"),
+        "category_execution_haircut_cents": ranking_summary.get("category_execution_haircut_cents"),
+        "top_positive_factors": ranking_summary.get("top_positive_factors", []),
+        "top_negative_factors": ranking_summary.get("top_negative_factors", []),
+    }
+
+
+def _resolve_numeric(payload: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _upsert_cluster_state(
@@ -457,6 +568,13 @@ def _seed_candidate_facts(seed: AlertSeed) -> dict[str, Any]:
         "market_url": seed.market_link,
         "expression_summary": seed.expression_summary,
         "expression_key": seed.expression_key,
+        "scan_sleeves": list(seed.scan_sleeves),
+        "volume_24h_usd": seed.volume_24h_usd,
+        "created_at": seed.created_at,
+        "external_anchor_cents": seed.external_anchor_cents,
+        "external_anchor_source_id": seed.external_anchor_source_id,
+        "external_anchor_url": seed.external_anchor_url,
+        "external_anchor_gap_cents": seed.external_anchor_gap_cents,
         "family_summary": seed.family_summary.as_dict(),
         "ranking_summary": seed.ranking_summary,
         "rules_text": seed.rules_text or "",

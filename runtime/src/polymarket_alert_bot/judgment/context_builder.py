@@ -27,6 +27,9 @@ def build_judgment_context(
                 "claim_snippet": item.claim_snippet,
                 "tier": item.tier,
                 "conflict_status": item.conflict_status,
+                "claim_slot": item.claim_slot,
+                "claim_key": item.claim_key,
+                "independent_key": item.independent_key,
             }
             for item in enriched_evidence.items
         ],
@@ -37,6 +40,9 @@ def build_judgment_context(
             "supplementary_count": enriched_evidence.supplementary_count,
             "unknown_count": enriched_evidence.unknown_count,
             "unresolved_primary_conflict": enriched_evidence.unresolved_primary_conflict,
+            "corroborated_primary_claim_count": enriched_evidence.corroborated_primary_claim_count,
+            "corroborated_primary_slots": list(enriched_evidence.corroborated_primary_slots),
+            "claim_slot_counts": enriched_evidence.claim_slot_counts,
         },
         "prior_cluster_state": prior_cluster_state or {},
         "position_context": position_context or {},
