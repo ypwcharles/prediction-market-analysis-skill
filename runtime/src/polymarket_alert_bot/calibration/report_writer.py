@@ -16,6 +16,14 @@ def _write_markdown_report(
     report_path: Path, summary: dict[str, int | float | str], created_at: str
 ) -> None:
     coverage_pct = f"{float(summary['cluster_coverage_ratio']) * 100:.1f}%"
+    degraded_rate_pct = f"{float(summary['scan_degraded_rate']) * 100:.1f}%"
+    disagree_rate_pct = f"{float(summary['disagree_feedback_rate']) * 100:.1f}%"
+    latest_scan_summary = (
+        f"{summary['latest_scan_events']}/"
+        f"{summary['latest_scan_contracts']}/"
+        f"{summary['latest_scan_shortlisted']}/"
+        f"{summary['latest_scan_promoted']}"
+    )
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
         "\n".join(
@@ -36,6 +44,43 @@ def _write_markdown_report(
                 f"- Short-window (<=3d): {summary['review_bucket_short']}",
                 f"- Medium-window (4-14d): {summary['review_bucket_medium']}",
                 f"- Long-window (>14d): {summary['review_bucket_long']}",
+                "",
+                "## Discovery Health",
+                f"- Scan runs: {summary['scan_run_count']}",
+                (
+                    "- Degraded scan runs: "
+                    f"{summary['degraded_scan_run_count']} ({degraded_rate_pct})"
+                ),
+                f"- Latest scan events/contracts/shortlist/promoted: {latest_scan_summary}",
+                f"- Total scanned contracts: {summary['scanned_contracts_total']}",
+                f"- Total shortlisted candidates: {summary['shortlisted_candidates_total']}",
+                f"- Total promoted seeds: {summary['promoted_seed_count_total']}",
+                (
+                    "- Structural-flag families/candidates: "
+                    f"{summary['families_with_structural_flags_total']}/"
+                    f"{summary['structurally_flagged_candidates_total']}"
+                ),
+                (
+                    "- Strict/research/skipped totals: "
+                    f"{summary['strict_count_total']}/"
+                    f"{summary['research_count_total']}/"
+                    f"{summary['skipped_count_total']}"
+                ),
+                f"- Retrieved shortlist candidates: {summary['retrieved_shortlist_candidates_total']}",
+                f"- Sleeve inputs: {summary['sleeve_input_totals']}",
+                f"- Sleeve shortlist: {summary['sleeve_shortlist_totals']}",
+                f"- Sleeve promoted: {summary['sleeve_promoted_totals']}",
+                "",
+                "## Operator Trust Signals",
+                f"- Stale alerts: {summary['stale_alert_count']}",
+                f"- Feedback events: {summary['feedback_event_count']}",
+                f"- Claimed-buy feedback: {summary['claimed_buy_feedback_count']}",
+                (
+                    "- Disagree feedback (false-positive proxy): "
+                    f"{summary['disagree_feedback_count']} ({disagree_rate_pct})"
+                ),
+                f"- Close-thesis feedback: {summary['close_thesis_feedback_count']}",
+                f"- Avg feedback latency hours: {summary['avg_feedback_latency_hours']}",
             ]
         )
         + "\n",

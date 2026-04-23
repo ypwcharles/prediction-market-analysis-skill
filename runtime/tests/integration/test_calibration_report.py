@@ -15,17 +15,20 @@ def test_run_report_writes_markdown_and_sqlite_summary(monkeypatch, tmp_path):
     ensure_runtime_dirs(paths)
     conn = connect_db(paths.db_path)
     apply_migrations(conn)
-    now = datetime.now(UTC).isoformat()
+    now_dt = datetime.now(UTC)
+    now = now_dt.isoformat()
 
     _seed_clusters(conn, now=now, cluster_ids=["cluster-1", "cluster-2"])
-    _seed_scan_run(conn, now=now, run_id="seed-run")
+    _seed_scan_run(conn, now=now, run_id="seed-run", status="degraded")
+    alert_1_created_at = (now_dt - timedelta(days=1)).isoformat()
+    alert_2_created_at = (now_dt - timedelta(days=8)).isoformat()
     _seed_alert(
         conn,
         alert_id="alert-1",
         run_id="seed-run",
         cluster_id="cluster-1",
         alert_kind="strict",
-        created_at=(datetime.now(UTC) - timedelta(days=1)).isoformat(),
+        created_at=alert_1_created_at,
     )
     _seed_alert(
         conn,
@@ -33,7 +36,7 @@ def test_run_report_writes_markdown_and_sqlite_summary(monkeypatch, tmp_path):
         run_id="seed-run",
         cluster_id="cluster-1",
         alert_kind="reprice",
-        created_at=(datetime.now(UTC) - timedelta(days=8)).isoformat(),
+        created_at=alert_2_created_at,
     )
     _seed_alert(
         conn,
@@ -41,7 +44,24 @@ def test_run_report_writes_markdown_and_sqlite_summary(monkeypatch, tmp_path):
         run_id="seed-run",
         cluster_id="cluster-2",
         alert_kind="strict_degraded",
-        created_at=(datetime.now(UTC) - timedelta(days=20)).isoformat(),
+        created_at=(now_dt - timedelta(days=20)).isoformat(),
+        status="stale",
+    )
+    _seed_feedback(
+        conn,
+        feedback_id="feedback-1",
+        alert_id="alert-1",
+        cluster_id="cluster-1",
+        feedback_type="claimed_buy",
+        created_at=(datetime.fromisoformat(alert_1_created_at) + timedelta(hours=1)).isoformat(),
+    )
+    _seed_feedback(
+        conn,
+        feedback_id="feedback-2",
+        alert_id="alert-2",
+        cluster_id="cluster-1",
+        feedback_type="disagree",
+        created_at=(datetime.fromisoformat(alert_2_created_at) + timedelta(hours=5)).isoformat(),
     )
     conn.commit()
 
@@ -84,6 +104,18 @@ def test_run_report_writes_markdown_and_sqlite_summary(monkeypatch, tmp_path):
     assert "- Short-window (<=3d): 1" in report_text
     assert "- Medium-window (4-14d): 1" in report_text
     assert "- Long-window (>14d): 1" in report_text
+    assert "## Discovery Health" in report_text
+    assert "- Scan runs: 1" in report_text
+    assert "- Degraded scan runs: 1 (100.0%)" in report_text
+    assert "- Latest scan events/contracts/shortlist/promoted: 8/20/6/3" in report_text
+    assert "- Sleeve inputs: hot_board=12 | short_dated=5 | anchor_gap=1" in report_text
+    assert "- Sleeve promoted: anchor_gap=1 | hot_board=1" in report_text
+    assert "## Operator Trust Signals" in report_text
+    assert "- Stale alerts: 1" in report_text
+    assert "- Feedback events: 2" in report_text
+    assert "- Claimed-buy feedback: 1" in report_text
+    assert "- Disagree feedback (false-positive proxy): 1 (50.0%)" in report_text
+    assert "- Avg feedback latency hours: 3.0" in report_text
 
 
 def test_run_report_marks_not_ready_without_high_priority_alerts(monkeypatch, tmp_path):
@@ -112,6 +144,9 @@ def test_run_report_marks_not_ready_without_high_priority_alerts(monkeypatch, tm
     assert "- Short-window (<=3d): 0" in report_text
     assert "- Medium-window (4-14d): 0" in report_text
     assert "- Long-window (>14d): 0" in report_text
+    assert "- Scan runs: 0" in report_text
+    assert "- Sleeve inputs: -" in report_text
+    assert "- Feedback events: 0" in report_text
 
 
 def test_run_report_marks_production_ready_with_override(monkeypatch, tmp_path):
@@ -171,14 +206,50 @@ def _seed_clusters(conn, *, now: str, cluster_ids: list[str]) -> None:
         )
 
 
-def _seed_scan_run(conn, *, now: str, run_id: str) -> None:
+def _seed_scan_run(conn, *, now: str, run_id: str, status: str = "clean") -> None:
     conn.execute(
         """
         INSERT INTO runs (
-            id, run_type, status, started_at, created_at
-        ) VALUES (?, ?, ?, ?, ?)
+            id,
+            run_type,
+            status,
+            started_at,
+            created_at,
+            scanned_events,
+            scanned_contracts,
+            shortlisted_candidates,
+            retrieved_shortlist_candidates,
+            promoted_seed_count,
+            families_with_structural_flags,
+            structurally_flagged_candidates,
+            sleeve_input_counts_json,
+            sleeve_shortlist_counts_json,
+            sleeve_promoted_counts_json,
+            strict_count,
+            research_count,
+            skipped_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [run_id, "scan", "clean", now, now],
+        [
+            run_id,
+            "scan",
+            status,
+            now,
+            now,
+            8,
+            20,
+            6,
+            4,
+            3,
+            2,
+            5,
+            '{"hot_board": 12, "short_dated": 5, "anchor_gap": 1}',
+            '{"hot_board": 3, "anchor_gap": 1}',
+            '{"hot_board": 1, "anchor_gap": 1}',
+            1,
+            2,
+            14,
+        ],
     )
 
 
@@ -190,6 +261,7 @@ def _seed_alert(
     cluster_id: str,
     alert_kind: str,
     created_at: str,
+    status: str = "active",
 ) -> None:
     conn.execute(
         """
@@ -204,8 +276,27 @@ def _seed_alert(
             cluster_id,
             alert_kind,
             "immediate",
-            "active",
+            status,
             f"dedupe-{alert_id}",
             created_at,
         ],
+    )
+
+
+def _seed_feedback(
+    conn,
+    *,
+    feedback_id: str,
+    alert_id: str,
+    cluster_id: str,
+    feedback_type: str,
+    created_at: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO feedback (
+            id, alert_id, thesis_cluster_id, feedback_type, created_at
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        [feedback_id, alert_id, cluster_id, feedback_type, created_at],
     )
