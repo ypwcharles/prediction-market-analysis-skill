@@ -22,6 +22,8 @@ def fetch_events(
     limit: int = 200,
     active: bool = True,
     closed: bool = False,
+    order: str = "volume24hr",
+    ascending: bool = False,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> list[dict[str, Any]]:
     close_client = False
@@ -38,8 +40,8 @@ def fetch_events(
                     "limit": limit,
                     "active": active,
                     "closed": closed,
-                    "order": "volume24hr",
-                    "ascending": False,
+                    "order": order,
+                    "ascending": ascending,
                 },
             )
             response.raise_for_status()
@@ -80,6 +82,7 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             raw_event.get("category")
         )
         event_end_time = _extract_event_end_time(event_context, raw_event)
+        event_created_at = _extract_created_at(event_context, raw_event)
         event_rules_text = _compose_rules_text(
             event_context,
             fields=(
@@ -105,7 +108,9 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                 "title": event_title,
                 "category": event_category,
                 "end_time": event_end_time,
+                "created_at": event_created_at,
                 "rules_text": event_rules_text,
+                "scan_sleeves": _merge_scan_sleeves(event_context, raw_event),
                 "markets": [],
             }
             normalized_by_event_id[event_id] = normalized_event
@@ -113,6 +118,10 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
         else:
             normalized_event["rules_text"] = _merge_rules_text(
                 normalized_event.get("rules_text"), event_rules_text
+            )
+            normalized_event["scan_sleeves"] = _merge_string_lists(
+                normalized_event.get("scan_sleeves"),
+                _merge_scan_sleeves(event_context, raw_event),
             )
             if not normalized_event.get("slug") and event_slug is not None:
                 normalized_event["slug"] = event_slug
@@ -122,17 +131,13 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                 normalized_event["category"] = event_category
             if not normalized_event.get("end_time") and event_end_time is not None:
                 normalized_event["end_time"] = event_end_time
-
-        existing_market_ids = {
-            market.get("id")
-            for market in normalized_event["markets"]
-            if isinstance(market, dict) and market.get("id") is not None
-        }
+            if not normalized_event.get("created_at") and event_created_at is not None:
+                normalized_event["created_at"] = event_created_at
         for raw_market in raw_markets:
             if not isinstance(raw_market, dict):
                 continue
             market_id = _string_or_none(raw_market.get("id"))
-            if market_id is None or market_id in existing_market_ids:
+            if market_id is None:
                 continue
             token_id = _extract_token_id(raw_market)
             condition_id = _extract_condition_id(raw_market)
@@ -141,8 +146,10 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
             status = _derive_market_status(raw_market)
             active = bool(raw_market.get("active", False))
             liquidity_usd = _to_float(raw_market.get("liquidity"))
+            volume_24h_usd = _extract_volume_24h(raw_market)
             outcome_name = _extract_outcome_name(raw_market)
             last_price = _extract_last_price(raw_market)
+            created_at = _extract_created_at(raw_market, event_context, raw_event)
             market_rules_text = _compose_rules_text(
                 raw_market,
                 fields=(
@@ -155,23 +162,67 @@ def normalize_events(raw_events: Sequence[dict[str, Any]]) -> list[dict[str, Any
                 ),
             )
             rules_text = _merge_rules_text(event_rules_text, market_rules_text)
+            scan_sleeves = _merge_scan_sleeves(raw_market, raw_event, event_context)
 
-            normalized_event["markets"].append(
-                {
-                    "id": market_id,
-                    "slug": market_slug,
-                    "question": question,
-                    "status": status,
-                    "active": active,
-                    "token_id": token_id,
-                    "condition_id": condition_id,
-                    "outcome_name": outcome_name,
-                    "last_price": last_price,
-                    "liquidity_usd": liquidity_usd,
-                    "rules_text": rules_text,
-                }
+            existing_market = next(
+                (
+                    market
+                    for market in normalized_event["markets"]
+                    if isinstance(market, dict) and market.get("id") == market_id
+                ),
+                None,
             )
-            existing_market_ids.add(market_id)
+            if existing_market is None:
+                normalized_event["markets"].append(
+                    {
+                        "id": market_id,
+                        "slug": market_slug,
+                        "question": question,
+                        "status": status,
+                        "active": active,
+                        "token_id": token_id,
+                        "condition_id": condition_id,
+                        "outcome_name": outcome_name,
+                        "last_price": last_price,
+                        "liquidity_usd": liquidity_usd,
+                        "volume_24h_usd": volume_24h_usd,
+                        "created_at": created_at,
+                        "scan_sleeves": scan_sleeves,
+                        "rules_text": rules_text,
+                    }
+                )
+                continue
+
+            existing_market["scan_sleeves"] = _merge_string_lists(
+                existing_market.get("scan_sleeves"),
+                scan_sleeves,
+            )
+            if not existing_market.get("slug") and market_slug is not None:
+                existing_market["slug"] = market_slug
+            if not existing_market.get("question") and question:
+                existing_market["question"] = question
+            if existing_market.get("status") in {None, "unknown"} and status != "unknown":
+                existing_market["status"] = status
+            if not existing_market.get("active") and active:
+                existing_market["active"] = active
+            if not existing_market.get("token_id") and token_id is not None:
+                existing_market["token_id"] = token_id
+            if not existing_market.get("condition_id") and condition_id is not None:
+                existing_market["condition_id"] = condition_id
+            if not existing_market.get("outcome_name") and outcome_name is not None:
+                existing_market["outcome_name"] = outcome_name
+            if existing_market.get("last_price") is None and last_price is not None:
+                existing_market["last_price"] = last_price
+            if existing_market.get("liquidity_usd") is None and liquidity_usd is not None:
+                existing_market["liquidity_usd"] = liquidity_usd
+            if existing_market.get("volume_24h_usd") is None and volume_24h_usd is not None:
+                existing_market["volume_24h_usd"] = volume_24h_usd
+            if not existing_market.get("created_at") and created_at is not None:
+                existing_market["created_at"] = created_at
+            existing_market["rules_text"] = _merge_rules_text(
+                existing_market.get("rules_text"),
+                rules_text,
+            )
 
     return [
         normalized_by_event_id[event_id]
@@ -251,6 +302,37 @@ def _extract_condition_id(raw_market: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_created_at(*contexts: dict[str, Any]) -> str | None:
+    for context in contexts:
+        for field in (
+            "createdAt",
+            "created_at",
+            "createdTime",
+            "created_time",
+            "publishTime",
+            "publish_time",
+        ):
+            value = _string_or_none(context.get(field))
+            if value is not None:
+                return value
+    return None
+
+
+def _extract_volume_24h(raw_market: dict[str, Any]) -> float | None:
+    for field in (
+        "volume24hr",
+        "volume24Hr",
+        "volume24HR",
+        "volume24h",
+        "oneDayVolume",
+        "one_day_volume",
+    ):
+        value = _to_float(raw_market.get(field))
+        if value is not None:
+            return value
+    return None
+
+
 def _extract_event_end_time(event_context: dict[str, Any], raw_event: dict[str, Any]) -> str | None:
     for field in (
         "endDate",
@@ -267,6 +349,33 @@ def _extract_event_end_time(event_context: dict[str, Any], raw_event: dict[str, 
         if raw_value is not None:
             return raw_value
     return None
+
+
+def _merge_scan_sleeves(*contexts: dict[str, Any]) -> tuple[str, ...]:
+    merged: list[str] = []
+    for context in contexts:
+        raw_sleeves = context.get("_scan_sleeves")
+        if not isinstance(raw_sleeves, (list, tuple)):
+            continue
+        for raw_sleeve in raw_sleeves:
+            sleeve = _string_or_none(raw_sleeve)
+            if sleeve and sleeve not in merged:
+                merged.append(sleeve)
+    return tuple(merged)
+
+
+def _merge_string_lists(
+    existing: Any, incoming: Sequence[str] | tuple[str, ...]
+) -> tuple[str, ...]:
+    merged: list[str] = []
+    for group in (existing, incoming):
+        if not isinstance(group, (list, tuple)):
+            continue
+        for raw_value in group:
+            value = _string_or_none(raw_value)
+            if value and value not in merged:
+                merged.append(value)
+    return tuple(merged)
 
 
 def _extract_outcome_name(raw_market: dict[str, Any]) -> str | None:

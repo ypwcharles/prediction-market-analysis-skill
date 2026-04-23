@@ -69,6 +69,11 @@ class XClient:
                     conflict_status=str(row["conflict_status"])
                     if row.get("conflict_status")
                     else None,
+                    claim_slot=str(row["claim_slot"]) if row.get("claim_slot") else None,
+                    claim_key=str(row["claim_key"]) if row.get("claim_key") else None,
+                    independent_key=str(row["independent_key"])
+                    if row.get("independent_key")
+                    else None,
                 )
             )
         return normalized

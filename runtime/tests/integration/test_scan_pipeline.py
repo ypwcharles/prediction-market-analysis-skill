@@ -350,6 +350,100 @@ def test_run_scan_caps_judgment_candidates_by_priority(monkeypatch, tmp_path):
     assert result.alert_seeds[0].market_id == "market-high"
 
 
+def test_run_scan_promotes_external_anchor_gap_sleeve(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+
+    gamma_payload = [
+        {
+            "id": "event-anchor-gap",
+            "slug": "fed-cuts-anchor-gap",
+            "title": "Fed Rate Cut Anchor Gap",
+            "category": "Politics",
+            "endDate": "2026-06-01T00:00:00Z",
+            "markets": [
+                {
+                    "id": "market-anchor",
+                    "slug": "fed-cut-by-june",
+                    "question": "Will the Fed cut rates by June?",
+                    "outcome": "YES",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-anchor",
+                    "liquidity": 5000,
+                    "lastTradePrice": 0.49,
+                    "token_id": "token-anchor",
+                },
+                {
+                    "id": "market-control",
+                    "slug": "celebrity-album",
+                    "question": "Will Celebrity A release an album by June?",
+                    "outcome": "YES",
+                    "status": "open",
+                    "active": True,
+                    "conditionId": "cond-control",
+                    "liquidity": 15000,
+                    "lastTradePrice": 0.49,
+                    "token_id": "token-control",
+                },
+            ],
+        }
+    ]
+    clob_payload = {
+        "books": [
+            {
+                "token_id": "token-anchor",
+                "bids": [{"price": "0.48"}],
+                "asks": [{"price": "0.50"}],
+            },
+            {
+                "token_id": "token-control",
+                "bids": [{"price": "0.48"}],
+                "asks": [{"price": "0.50"}],
+            },
+        ]
+    }
+
+    result = run_scan(
+        paths,
+        gamma_payload=gamma_payload,
+        clob_payload=clob_payload,
+        external_anchor_payload=[
+            {
+                "condition_id": "cond-anchor",
+                "external_anchor_cents": 68.0,
+                "source_id": "kalshi-fed-proxy",
+                "url": "https://example.com/kalshi/fed-cut",
+            }
+        ],
+        max_judgment_candidates=1,
+    )
+
+    seed = result.alert_seeds[0]
+    assert seed.market_id == "market-anchor"
+    assert seed.external_anchor_cents == 68.0
+    assert seed.external_anchor_source_id == "kalshi-fed-proxy"
+    assert seed.external_anchor_url == "https://example.com/kalshi/fed-cut"
+    assert seed.external_anchor_gap_cents == 19.0
+    assert seed.scan_sleeves == ("anchor_gap",)
+    assert seed.ranking_summary["primary_scan_sleeve"] == "anchor_gap"
+    assert seed.ranking_summary["external_anchor_gap_score"] == 57.0
+
+    conn = connect_db(paths.db_path)
+    run_row = conn.execute(
+        """
+        SELECT sleeve_input_counts_json, sleeve_shortlist_counts_json, sleeve_promoted_counts_json
+        FROM runs
+        WHERE id = ?
+        """,
+        [result.run_id],
+    ).fetchone()
+    assert json.loads(run_row["sleeve_input_counts_json"])["anchor_gap"] == 1
+    assert json.loads(run_row["sleeve_shortlist_counts_json"])["anchor_gap"] == 1
+    assert json.loads(run_row["sleeve_promoted_counts_json"])["anchor_gap"] == 1
+
+
 def test_run_scan_prefers_structural_candidate_over_more_liquid_hot_board(monkeypatch, tmp_path):
     monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(tmp_path / ".runtime-data"))
     paths = load_runtime_paths()

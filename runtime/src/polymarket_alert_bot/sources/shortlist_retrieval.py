@@ -7,7 +7,13 @@ from datetime import datetime
 
 from polymarket_alert_bot.config.settings import RuntimeConfig
 from polymarket_alert_bot.scanner.board_scan import AlertSeed
-from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
+from polymarket_alert_bot.sources.evidence_enricher import (
+    EvidenceItem,
+    evidence_claim_key,
+    infer_claim_slot,
+    infer_independent_key,
+    normalize_claim_key,
+)
 from polymarket_alert_bot.sources.feed_loader import load_feed_rows
 from polymarket_alert_bot.sources.news_client import NewsClient
 from polymarket_alert_bot.sources.x_client import XClient
@@ -203,9 +209,9 @@ def _row_text(row: dict[str, object]) -> str:
 
 def _dedupe_items(items: Iterable[EvidenceItem]) -> list[EvidenceItem]:
     deduped: list[EvidenceItem] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str]] = set()
     for item in items:
-        key = (item.source_id, item.url, item.claim_snippet)
+        key = evidence_claim_key(item)
         if key in seen:
             continue
         seen.add(key)
@@ -217,13 +223,13 @@ def _select_scored_evidence_items(
     scored_items: list[tuple[int, EvidenceItem]],
 ) -> tuple[EvidenceItem, ...]:
     selected: list[EvidenceItem] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str]] = set()
     primary_selected = 0
 
     for _, item in scored_items:
         if item.tier != "primary":
             continue
-        key = (item.source_id, item.url, item.claim_snippet)
+        key = evidence_claim_key(item)
         if key in seen:
             continue
         seen.add(key)
@@ -239,7 +245,7 @@ def _select_scored_evidence_items(
         return tuple(selected)
 
     for _, item in scored_items:
-        key = (item.source_id, item.url, item.claim_snippet)
+        key = evidence_claim_key(item)
         if key in seen:
             continue
         seen.add(key)
@@ -253,13 +259,9 @@ def _select_scored_rows(
     scored_rows: list[tuple[int, dict[str, object]]],
 ) -> list[dict[str, object]]:
     selected: list[dict[str, object]] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str]] = set()
     for _, row in scored_rows:
-        key = (
-            str(row.get("source_id") or ""),
-            str(row.get("url") or ""),
-            str(row.get("claim_snippet") or ""),
-        )
+        key = _row_claim_key(row)
         if key in seen:
             continue
         seen.add(key)
@@ -267,6 +269,27 @@ def _select_scored_rows(
         if len(selected) >= MAX_ITEMS_PER_SOURCE:
             break
     return selected
+
+
+def _row_claim_key(row: dict[str, object]) -> tuple[str, str]:
+    claim_snippet = str(row.get("claim_snippet") or "")
+    source_id = str(row.get("source_id") or "")
+    source_kind = str(row.get("source_kind") or row.get("source") or "unknown")
+    url = str(row.get("url") or "")
+    claim_slot = infer_claim_slot(
+        claim_snippet=claim_snippet,
+        source_kind=source_kind,
+        url=url,
+    )
+    return (
+        normalize_claim_key(claim_snippet=claim_snippet, claim_slot=claim_slot) or claim_snippet,
+        source_id
+        or infer_independent_key(
+            source_id=source_id,
+            source_kind=source_kind,
+            url=url,
+        ),
+    )
 
 
 def _normalize_text(text: object) -> str:

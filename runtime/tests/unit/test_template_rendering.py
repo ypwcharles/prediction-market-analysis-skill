@@ -38,6 +38,26 @@ def test_render_strict_memo_snapshot() -> None:
         "kill_criteria_text": "Exit if primary sources confirm direct US strike authorization or if YES re-prices below edge floor.",
         "evidence_fresh_until": "2026-04-17T14:30:00Z",
         "recheck_required_at": "2026-04-17T12:00:00Z",
+        "anchor_stack": {
+            "market_price_anchor_cents": 42.0,
+            "external_anchor_cents": 58.5,
+            "rule_adjusted_payout_cents": 55.4,
+            "execution_adjusted_fair_entry_cents": 42.0,
+            "anchor_gap_cents": 16.5,
+            "execution_haircut_cents": 13.4,
+        },
+        "execution_overlay": {
+            "alpha_type": "structure",
+            "execution_style": "maker_bias",
+            "primary_scan_sleeve": "family_inconsistency",
+            "scan_sleeves": ["hot_board", "family_inconsistency"],
+            "fill_probability_score": 71.2,
+            "crowding_penalty": 12.5,
+            "overlap_penalty": 4.0,
+            "category_execution_haircut_cents": 1.2,
+            "top_positive_factors": ["structural edge proxy", "fill probability"],
+            "top_negative_factors": ["crowding penalty"],
+        },
         "citations": [
             {
                 "claim": "Defense officials said no strike order has been issued.",
@@ -147,6 +167,22 @@ def test_render_heartbeat_snapshot() -> None:
         "strict_count": 2,
         "research_count": 4,
         "skipped_count": 19,
+        "sleeve_input_counts": {
+            "hot_board": 12,
+            "short_dated": 5,
+            "newly_listed": 2,
+            "family_inconsistency": 4,
+        },
+        "sleeve_shortlist_counts": {
+            "hot_board": 3,
+            "short_dated": 2,
+            "family_inconsistency": 1,
+        },
+        "sleeve_promoted_counts": {
+            "hot_board": 2,
+            "short_dated": 1,
+            "family_inconsistency": 2,
+        },
         "degraded_reason": "news source timeout, monitor still healthy",
     }
     _assert_snapshot("heartbeat.txt", render_heartbeat(payload))

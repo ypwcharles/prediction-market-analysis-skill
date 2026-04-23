@@ -140,6 +140,32 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
     assert main(["scan"]) == 0
 
     conn = connect_db(data_dir / "sqlite" / "runtime.sqlite3")
+    run_row = conn.execute(
+        """
+        SELECT
+            id,
+            sleeve_input_counts_json,
+            sleeve_shortlist_counts_json,
+            sleeve_promoted_counts_json
+        FROM runs
+        WHERE run_type = 'scan'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    assert run_row is not None
+    sleeve_input_counts = json.loads(run_row["sleeve_input_counts_json"])
+    sleeve_shortlist_counts = json.loads(run_row["sleeve_shortlist_counts_json"])
+    sleeve_promoted_counts = json.loads(run_row["sleeve_promoted_counts_json"])
+    for counts in (
+        sleeve_input_counts,
+        sleeve_shortlist_counts,
+        sleeve_promoted_counts,
+    ):
+        assert counts["hot_board"] >= 1
+        assert counts["short_dated"] >= 1
+        assert counts["newly_listed"] >= 1
+
     alerts = conn.execute(
         """
         SELECT alert_kind, market_id, condition_id, status, archive_path, why_now
@@ -213,6 +239,16 @@ def test_scan_command_persists_final_alerts_clusters_and_archives(tmp_path, monk
         "market: https://polymarket.com/event/live-election-2026/candidate-a-wins-live"
         in archive_text_by_market["mkt-live-tradable"]
     )
+    assert "anchor stack:" in archive_text_by_market["mkt-live-tradable"]
+    assert "market price anchor:" in archive_text_by_market["mkt-live-tradable"]
+    assert "execution-adjusted fair entry:" in archive_text_by_market["mkt-live-tradable"]
+    assert "execution overlay:" in archive_text_by_market["mkt-live-tradable"]
+    assert "primary sleeve:" in archive_text_by_market["mkt-live-tradable"]
+    assert (
+        "sleeves: hot_board, short_dated, newly_listed"
+        in archive_text_by_market["mkt-live-tradable"]
+    )
+    assert "category execution haircut:" in archive_text_by_market["mkt-live-tradable"]
     assert (
         "market: https://polymarket.com/event/live-election-2026/candidate-b-wins-live"
         in archive_text_by_market["mkt-live-degraded"]
@@ -1463,6 +1499,11 @@ def test_scan_command_marks_heartbeat_degraded_when_shortlist_retrieval_fails(
     assert heartbeat_text.startswith("[DEGRADED]")
     assert "events/contracts/shortlist/retrieved/promoted: 1/2/2/0/1" in heartbeat_text
     assert "families/flagged families/flagged candidates: 1/0/0" in heartbeat_text
+    assert "sleeves input: hot_board=" in heartbeat_text
+    assert "short_dated=" in heartbeat_text
+    assert "newly_listed=" in heartbeat_text
+    assert "sleeves shortlist: hot_board=" in heartbeat_text
+    assert "sleeves promoted: hot_board=" in heartbeat_text
     assert "shortlist_x_failed:TimeoutError" in heartbeat_text
 
 

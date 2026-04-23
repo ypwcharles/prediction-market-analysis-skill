@@ -26,6 +26,9 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             missing_outcome_candidates INTEGER DEFAULT 0,
             missing_family_context_candidates INTEGER DEFAULT 0,
             rejection_reasons_json TEXT,
+            sleeve_input_counts_json TEXT,
+            sleeve_shortlist_counts_json TEXT,
+            sleeve_promoted_counts_json TEXT,
             strict_count INTEGER DEFAULT 0,
             research_count INTEGER DEFAULT 0,
             skipped_count INTEGER DEFAULT 0,
@@ -201,6 +204,9 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "runs", "missing_outcome_candidates", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "missing_family_context_candidates", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "rejection_reasons_json", "TEXT")
+    _ensure_column(conn, "runs", "sleeve_input_counts_json", "TEXT")
+    _ensure_column(conn, "runs", "sleeve_shortlist_counts_json", "TEXT")
+    _ensure_column(conn, "runs", "sleeve_promoted_counts_json", "TEXT")
     _dedupe_alert_rows(conn)
     conn.execute(
         """

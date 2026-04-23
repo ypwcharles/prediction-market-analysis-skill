@@ -160,6 +160,40 @@ def test_build_ranking_summary_exposes_structural_family_metrics():
     assert summary.family_negative_implied_hazard_count == 1
 
 
+def test_build_ranking_summary_scores_external_anchor_gap_sleeve():
+    candidate = _candidate(
+        market_id="market-anchor-gap",
+        question="Will the Fed cut rates by June?",
+        event_end_time="2026-06-01T00:00:00Z",
+        scan_sleeves=("anchor_gap",),
+        external_anchor_cents=68.0,
+        external_anchor_gap_cents=19.0,
+    )
+
+    summary = build_ranking_summary(candidate)
+
+    assert summary.primary_scan_sleeve == "anchor_gap"
+    assert summary.external_anchor_gap_score == 57.0
+    assert summary.alpha_type == "structure"
+    assert "external anchor gap" in summary.top_positive_factors
+
+
+def test_build_ranking_summary_ignores_below_threshold_external_anchor_without_sleeve():
+    candidate = _candidate(
+        market_id="market-small-anchor-gap",
+        question="Will the Fed cut rates by June?",
+        event_end_time="2026-06-01T00:00:00Z",
+        external_anchor_cents=53.0,
+        external_anchor_gap_cents=4.0,
+    )
+
+    summary = build_ranking_summary(candidate)
+
+    assert summary.primary_scan_sleeve == "unassigned"
+    assert summary.external_anchor_gap_score == 0.0
+    assert "external anchor gap" not in summary.top_positive_factors
+
+
 def _candidate(
     *,
     market_id: str,
@@ -178,6 +212,9 @@ def _candidate(
     partition_anomaly_count: int = 0,
     negative_implied_hazard_count: int = 0,
     rule_scope_adjacency_count: int = 0,
+    scan_sleeves: tuple[str, ...] = (),
+    external_anchor_cents: float | None = None,
+    external_anchor_gap_cents: float | None = None,
 ) -> ScanCandidate:
     return ScanCandidate(
         event_id="event-1",
@@ -226,4 +263,11 @@ def _candidate(
             negative_implied_hazard_count=negative_implied_hazard_count,
             rule_scope_adjacency_count=rule_scope_adjacency_count,
         ),
+        scan_sleeves=scan_sleeves,
+        external_anchor_cents=external_anchor_cents,
+        external_anchor_source_id="kalshi" if external_anchor_cents is not None else None,
+        external_anchor_url="https://example.com/anchor"
+        if external_anchor_cents is not None
+        else None,
+        external_anchor_gap_cents=external_anchor_gap_cents,
     )
