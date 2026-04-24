@@ -120,6 +120,20 @@ Evidence rows may include optional claim-graph fields:
 
 When those fields are absent, the runtime infers claim slots and keys from the snippet, source kind, and URL. Strict promotion depends on independent corroboration of underlying claims rather than duplicated copies of the same report.
 
+## Semantic Relevance Runner Contract
+
+When `POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_ENABLED=1`, the runtime sends evidence to the configured semantic relevance runner with `contract_version="semantic_relevance.v2"`.
+
+Runner responses may return `decisions`, `items`, or `evidence` arrays. Each decision can target a source with `source_id`, `url`, or `url + claim_snippet`. A decision that only contains `claim_key` is source-scoped by default and will not be applied across every source sharing that claim key.
+
+To apply a decision across all evidence rows for the same underlying claim, the runner must explicitly mark it as claim-level with one of:
+
+- `scope: "claim"`
+- `decision_scope: "claim"` / `decision_scope: "claim_key"` / `decision_scope: "claim_level"` / `decision_scope: "cross_source_claim"`
+- `claim_level: true`
+
+This keeps one weak or irrelevant source from deleting independent corroboration for the same claim. Prefer exact `source_id` or `url` decisions when the model is judging a specific article or post; use claim-level decisions only when the underlying claim itself is settlement-irrelevant or conflicting across every source.
+
 ## External Anchor Contract
 
 External anchors are optional configured rows that represent non-Polymarket fair-value references, such as another venue, model, bookmaker, or curated operator feed. Configure one of:

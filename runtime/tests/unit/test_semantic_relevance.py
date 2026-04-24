@@ -6,6 +6,7 @@ from polymarket_alert_bot.scanner.board_scan import AlertSeed
 from polymarket_alert_bot.scanner.family import CandidateFamilySummary, FamilyMarketSummary
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
 from polymarket_alert_bot.sources.semantic_relevance import (
+    SEMANTIC_RELEVANCE_CONTRACT_VERSION,
     ParseError,
     SemanticRelevanceAdapter,
     parse_semantic_relevance_result,
@@ -54,6 +55,19 @@ def test_parse_semantic_relevance_result_rejects_non_object_payload() -> None:
         pass
     else:
         raise AssertionError("expected ParseError")
+
+
+def test_semantic_relevance_adapter_emits_v2_contract_version() -> None:
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+    )
+
+    payload = adapter.build_payload(seed=_seed(), evidence_items=_evidence_items())
+
+    assert SEMANTIC_RELEVANCE_CONTRACT_VERSION == "semantic_relevance.v2"
+    assert payload["contract_version"] == "semantic_relevance.v2"
 
 
 def test_semantic_relevance_adapter_filters_and_marks_conflicts() -> None:
@@ -189,6 +203,85 @@ def test_semantic_relevance_adapter_matches_nested_source_url_without_source_id(
     assert [item.source_id for item in result.items] == ["wire-a", "wire-c"]
 
 
+def test_semantic_relevance_adapter_does_not_apply_source_scoped_claim_key_across_sources() -> None:
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "items": [
+                {
+                    "claim_key": "same-underlying-claim",
+                    "keep": False,
+                }
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(
+        seed=_seed(),
+        evidence_items=_shared_claim_key_evidence_items(),
+    )
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-a", "wire-b"]
+
+
+def test_semantic_relevance_adapter_allows_explicit_claim_level_decision() -> None:
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "items": [
+                {
+                    "claim_key": "same-underlying-claim",
+                    "scope": "claim",
+                    "keep": False,
+                }
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(
+        seed=_seed(),
+        evidence_items=_shared_claim_key_evidence_items(),
+    )
+
+    assert result.degraded_reason is None
+    assert result.items == ()
+
+
+def test_semantic_relevance_adapter_prefers_source_match_over_claim_level_fallback() -> None:
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+        runner=lambda payload, timeout: {
+            "items": [
+                {
+                    "claim_key": "same-underlying-claim",
+                    "scope": "claim",
+                    "keep": False,
+                },
+                {
+                    "source_id": "wire-b",
+                    "claim_key": "same-underlying-claim",
+                    "keep": True,
+                },
+            ],
+        },
+    )
+
+    result = adapter.filter_evidence(
+        seed=_seed(),
+        evidence_items=_shared_claim_key_evidence_items(),
+    )
+
+    assert result.degraded_reason is None
+    assert [item.source_id for item in result.items] == ["wire-b"]
+
+
 def test_semantic_relevance_adapter_does_not_reappend_items_beyond_max_items() -> None:
     adapter = SemanticRelevanceAdapter(
         enabled=True,
@@ -285,6 +378,29 @@ def _overflow_evidence_items() -> tuple[EvidenceItem, ...]:
             url="https://x.com/example/status/2",
             claim_snippet="Overflow x evidence should not bypass semantic gating.",
             tier="supplementary",
+        ),
+    )
+
+
+def _shared_claim_key_evidence_items() -> tuple[EvidenceItem, ...]:
+    return (
+        EvidenceItem(
+            source_id="wire-a",
+            source_kind="news",
+            fetched_at="2026-04-22T01:00:00Z",
+            url="https://news.example.test/a",
+            claim_snippet="Candidate A still lacks certified result.",
+            tier="primary",
+            claim_key="same-underlying-claim",
+        ),
+        EvidenceItem(
+            source_id="wire-b",
+            source_kind="news",
+            fetched_at="2026-04-22T01:05:00Z",
+            url="https://news.example.test/b",
+            claim_snippet="Independent source confirms the same claim.",
+            tier="primary",
+            claim_key="same-underlying-claim",
         ),
     )
 

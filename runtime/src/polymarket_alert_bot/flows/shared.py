@@ -168,7 +168,6 @@ def _build_anchor_stack(seed: AlertSeed, parsed: ParsedJudgment) -> dict[str, An
             "market_price_anchor_cents",
             "market_anchor_cents",
         )
-        or parsed.max_entry_cents
         or seed.best_ask_cents
         or seed.mid_cents
         or seed.last_price_cents

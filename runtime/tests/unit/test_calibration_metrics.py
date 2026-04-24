@@ -131,6 +131,120 @@ def test_build_calibration_summary_respects_production_override(monkeypatch, tmp
 
     summary = build_calibration_summary(conn)
     assert summary["status"] == "ready_for_production"
+    assert summary["production_candidate_alerts"] == 2
+
+
+def test_build_calibration_summary_override_requires_clean_discovery_and_trust(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ALLOW_PRODUCTION_REPORT", "1")
+    conn = connect_db(tmp_path / "runtime.sqlite3")
+    apply_migrations(conn)
+    now = datetime.now(UTC).isoformat()
+    _seed_base_context(
+        conn,
+        now=now,
+        run_id="run-1",
+        cluster_ids=["cluster-1", "cluster-2"],
+        run_status="degraded",
+    )
+    _seed_alert(
+        conn,
+        alert_id="alert-1",
+        run_id="run-1",
+        cluster_id="cluster-1",
+        alert_kind="strict",
+        created_at=now,
+        status="stale",
+    )
+    _seed_alert(
+        conn,
+        alert_id="alert-2",
+        run_id="run-1",
+        cluster_id="cluster-2",
+        alert_kind="reprice",
+        created_at=now,
+    )
+    _seed_feedback(
+        conn,
+        feedback_id="feedback-1",
+        alert_id="alert-2",
+        cluster_id="cluster-2",
+        feedback_type="disagree",
+        created_at=now,
+    )
+    conn.commit()
+
+    summary = build_calibration_summary(conn)
+
+    assert summary["status"] == "ready_for_limited_trial"
+    assert summary["degraded_scan_run_count"] == 1
+    assert summary["stale_alert_count"] == 1
+    assert summary["disagree_feedback_count"] == 1
+
+
+def test_build_calibration_summary_does_not_treat_strict_degraded_as_production_candidate(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ALLOW_PRODUCTION_REPORT", "1")
+    conn = connect_db(tmp_path / "runtime.sqlite3")
+    apply_migrations(conn)
+    now = datetime.now(UTC).isoformat()
+    _seed_base_context(conn, now=now, run_id="run-1", cluster_ids=["cluster-1"])
+    _seed_alert(
+        conn,
+        alert_id="alert-1",
+        run_id="run-1",
+        cluster_id="cluster-1",
+        alert_kind="strict_degraded",
+        created_at=now,
+    )
+    conn.commit()
+
+    summary = build_calibration_summary(conn)
+
+    assert summary["status"] == "ready_for_limited_trial"
+    assert summary["total_high_priority_alerts"] == 1
+    assert summary["production_candidate_alerts"] == 0
+
+
+def test_build_calibration_summary_override_requires_scan_coverage(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_ALLOW_PRODUCTION_REPORT", "1")
+    conn = connect_db(tmp_path / "runtime.sqlite3")
+    apply_migrations(conn)
+    now = datetime.now(UTC).isoformat()
+    for cluster_id in ["cluster-1"]:
+        conn.execute(
+            """
+            INSERT INTO thesis_clusters (
+                id, canonical_name, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [cluster_id, cluster_id, "open", now, now],
+        )
+    conn.execute(
+        """
+        INSERT INTO runs (
+            id, run_type, status, started_at, created_at
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        ["monitor-run", "monitor", "clean", now, now],
+    )
+    _seed_alert(
+        conn,
+        alert_id="alert-1",
+        run_id="monitor-run",
+        cluster_id="cluster-1",
+        alert_kind="strict",
+        created_at=now,
+    )
+    conn.commit()
+
+    summary = build_calibration_summary(conn)
+
+    assert summary["status"] == "ready_for_limited_trial"
+    assert summary["scan_run_count"] == 0
+    assert summary["scanned_contracts_total"] == 0
 
 
 def test_build_calibration_summary_returns_not_ready_without_signal(tmp_path):

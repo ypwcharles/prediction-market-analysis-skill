@@ -14,7 +14,7 @@ from polymarket_alert_bot.scanner.board_scan import AlertSeed
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
 
 DEFAULT_EXTERNAL_RUNNER_ENV = "POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_RUNNER_CMD"
-SEMANTIC_RELEVANCE_CONTRACT_VERSION = "semantic_relevance.v1"
+SEMANTIC_RELEVANCE_CONTRACT_VERSION = "semantic_relevance.v2"
 
 SemanticRunner = Callable[[dict[str, Any], int], dict[str, Any] | str]
 ExternalCommandRunner = Callable[[list[str], str, int], dict[str, Any] | str]
@@ -32,6 +32,8 @@ class SemanticEvidenceDecision(BaseModel):
     claim_snippet: str | None = None
     claim_slot: str | None = None
     claim_key: str | None = None
+    decision_scope: str | None = None
+    claim_level: bool | None = None
     keep: bool | None = None
     conflict_status: str | None = None
     reason: str | None = None
@@ -42,6 +44,10 @@ class SemanticEvidenceDecision(BaseModel):
         if not isinstance(raw, dict):
             return raw
         payload = dict(raw)
+        if payload.get("decision_scope") is None and payload.get("scope") is not None:
+            payload["decision_scope"] = payload.get("scope")
+        if isinstance(payload.get("decision_scope"), str):
+            payload["decision_scope"] = _normalize_label(payload["decision_scope"])
         source = payload.get("source")
         if isinstance(source, dict):
             payload.setdefault("source_id", source.get("id") or source.get("source_id"))
@@ -315,7 +321,7 @@ def _apply_decisions(
                 (parsed_decision.url, parsed_decision.claim_snippet),
                 parsed_decision,
             )
-        if parsed_decision.claim_key:
+        if parsed_decision.claim_key and _is_claim_level_decision(parsed_decision):
             decisions_by_claim_key.setdefault(parsed_decision.claim_key, parsed_decision)
         if parsed_decision.url:
             decisions_by_url.setdefault(parsed_decision.url, parsed_decision)
@@ -391,18 +397,29 @@ def _match_decision(
         if url_claim_match is not None:
             return url_claim_match
 
-    if item.claim_key:
-        claim_key_match = decisions_by_claim_key.get(item.claim_key)
-        if claim_key_match is not None:
-            return claim_key_match
-
     source_id_match = decisions_by_source_id.get(item.source_id)
     if source_id_match is not None:
         return source_id_match
 
     if item.url:
-        return decisions_by_url.get(item.url)
+        url_match = decisions_by_url.get(item.url)
+        if url_match is not None:
+            return url_match
+
+    if item.claim_key:
+        claim_key_match = decisions_by_claim_key.get(item.claim_key)
+        if claim_key_match is not None:
+            return claim_key_match
     return None
+
+
+def _is_claim_level_decision(decision: SemanticEvidenceDecision) -> bool:
+    return decision.claim_level is True or decision.decision_scope in {
+        "claim",
+        "claim_key",
+        "claim_level",
+        "cross_source_claim",
+    }
 
 
 def _normalize_label(value: str) -> str:

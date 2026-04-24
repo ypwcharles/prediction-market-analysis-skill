@@ -2,6 +2,20 @@
 
 All notable changes to this repository are tracked here.
 
+## [0.2.1.0] - 2026-04-24
+
+### Changed
+
+- Changed strict memo anchor accounting so market price anchors come from live market quotes or explicit market-anchor payload fields, while model max-entry recommendations stay in fair-entry accounting.
+- Changed semantic relevance filtering to `semantic_relevance.v2`, where same-claim decisions only apply across sources when the runner explicitly marks them as claim-level decisions.
+- Changed calibration readiness so production status requires real clean scan coverage and clean operator-trust signals, not just a manual report override.
+
+### Fixed
+
+- Fixed anchor-gap reporting that could display a model-recommended entry price as the market price anchor.
+- Fixed source-level semantic relevance decisions that could accidentally remove independent evidence sharing the same claim key.
+- Fixed production readiness reporting so `strict_degraded` alerts and zero-scan runs cannot satisfy the production-ready gate.
+
 ## [0.2.0.0] - 2026-04-22
 
 ### Added
