@@ -148,7 +148,7 @@ def test_render_monitor_alert_includes_market_link_when_present() -> None:
             "market_link": "https://polymarket.com/event/test-event/test-market",
         }
     )
-    assert "market: https://polymarket.com/event/test-event/test-market" in rendered
+    assert "市场：https://polymarket.com/event/test-event/test-market" in rendered
 
 
 def test_render_heartbeat_snapshot() -> None:

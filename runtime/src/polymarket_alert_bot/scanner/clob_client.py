@@ -8,6 +8,7 @@ import httpx
 
 DEFAULT_CLOB_BOOK_URL = "https://clob.polymarket.com/book"
 DEFAULT_TIMEOUT_SECONDS = 8.0
+TRANSIENT_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,10 @@ def fetch_book(
                 if not isinstance(payload, Mapping):
                     return degraded_snapshot(token_id, "book_malformed")
                 return snapshot_from_book(token_id, payload)
-            except httpx.HTTPStatusError:
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code in TRANSIENT_HTTP_STATUS_CODES and attempt == 0:
+                    continue
                 return degraded_snapshot(token_id, "book_fetch_error")
             except httpx.TransportError:
                 if attempt == 1:

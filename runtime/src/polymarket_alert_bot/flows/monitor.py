@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 from uuid import uuid4
 
 from polymarket_alert_bot.config.settings import RuntimeConfig, RuntimePaths, load_runtime_config
@@ -48,22 +48,29 @@ def execute_monitor_flow(
     )
     delivered_alert_ids: list[str] = []
     now_iso = _now_iso()
+    delivery_groups: dict[str, dict[str, Any]] = {}
 
-    for payload in outcome.fired_actions:
+    def _append_delivery_candidate(
+        payload: dict[str, object], *, parsed: ParsedJudgment | None = None
+    ) -> None:
         source_alert = repository.get_alert(str(payload["alert_id"]))
         if source_alert is None:
-            continue
-        source_market_link = _resolve_alert_market_link(conn, source_alert)
-        monitor_alert_id = _deliver_monitor_action(
-            repository=repository,
-            config=config,
-            run_id=outcome.run_id,
-            source_alert=source_alert,
-            payload=payload,
-            now_iso=now_iso,
-            market_link=source_market_link,
+            return
+        group = delivery_groups.setdefault(
+            str(payload["alert_id"]),
+            {
+                "source_alert": source_alert,
+                "market_link": _resolve_alert_market_link(conn, source_alert),
+                "payloads": [],
+                "parsed_results": [],
+            },
         )
-        delivered_alert_ids.append(monitor_alert_id)
+        group["payloads"].append(dict(payload))
+        if parsed is not None:
+            group["parsed_results"].append(parsed)
+
+    for payload in outcome.fired_actions:
+        _append_delivery_candidate(payload)
 
     for payload in outcome.pending_recheck_actions:
         source_alert = repository.get_alert(str(payload["alert_id"]))
@@ -79,15 +86,18 @@ def execute_monitor_flow(
         )
         if not _monitor_recheck_allows_delivery(parsed):
             continue
-        source_market_link = _resolve_alert_market_link(conn, source_alert)
+        _append_delivery_candidate(payload, parsed=parsed)
+
+    for group in delivery_groups.values():
         monitor_alert_id = _deliver_monitor_action(
             repository=repository,
             config=config,
             run_id=outcome.run_id,
-            source_alert=source_alert,
-            payload=payload,
+            source_alert=group["source_alert"],
+            payloads=group["payloads"],
+            parsed_results=group["parsed_results"],
             now_iso=now_iso,
-            market_link=source_market_link,
+            market_link=group["market_link"],
         )
         delivered_alert_ids.append(monitor_alert_id)
 
@@ -104,16 +114,25 @@ def _deliver_monitor_action(
     config: RuntimeConfig,
     run_id: str,
     source_alert,
-    payload: dict[str, object],
+    payloads: list[dict[str, object]],
+    parsed_results: list[ParsedJudgment],
     now_iso: str,
     market_link: str | None,
 ) -> str:
     monitor_alert_id = str(uuid4())
+    primary_parsed = _pick_primary_parsed(parsed_results)
     message = render_monitor_alert(
         {
-            "thesis": source_alert["why_now"] or source_alert["thesis_cluster_id"] or "-",
-            "trigger": payload,
-            "suggested_action": payload["suggested_action"],
+            "thesis": (
+                primary_parsed.thesis
+                if primary_parsed and primary_parsed.thesis
+                else source_alert["why_now"] or source_alert["thesis_cluster_id"] or "-"
+            ),
+            "summary": primary_parsed.summary if primary_parsed else None,
+            "why_now": primary_parsed.why_now if primary_parsed else source_alert["why_now"],
+            "watch_item": primary_parsed.watch_item if primary_parsed else None,
+            "suggested_action": _joined_suggested_actions(payloads),
+            "triggers": payloads,
             "market_link": market_link,
         }
     )
@@ -121,28 +140,89 @@ def _deliver_monitor_action(
         config=config,
         text=message,
         alert_id=monitor_alert_id,
-        thesis_cluster_id=str(payload["thesis_cluster_id"]),
+        thesis_cluster_id=str(payloads[0]["thesis_cluster_id"]),
     )
     repository.insert_alert(
         {
             "id": monitor_alert_id,
             "run_id": run_id,
-            "thesis_cluster_id": payload["thesis_cluster_id"],
+            "thesis_cluster_id": payloads[0]["thesis_cluster_id"],
             "condition_id": source_alert["condition_id"],
             "event_id": source_alert["event_id"],
             "market_id": source_alert["market_id"],
             "token_id": source_alert["token_id"],
             "alert_kind": "monitor",
             "delivery_mode": "immediate",
+            "side": primary_parsed.side if primary_parsed else source_alert["side"],
+            "theoretical_edge_cents": (
+                primary_parsed.theoretical_edge_cents
+                if primary_parsed and primary_parsed.theoretical_edge_cents is not None
+                else source_alert["theoretical_edge_cents"]
+            ),
+            "executable_edge_cents": (
+                primary_parsed.executable_edge_cents
+                if primary_parsed and primary_parsed.executable_edge_cents is not None
+                else source_alert["executable_edge_cents"]
+            ),
+            "max_entry_cents": (
+                primary_parsed.max_entry_cents
+                if primary_parsed and primary_parsed.max_entry_cents is not None
+                else source_alert["max_entry_cents"]
+            ),
+            "suggested_size_usdc": (
+                primary_parsed.suggested_size_usdc
+                if primary_parsed and primary_parsed.suggested_size_usdc is not None
+                else source_alert["suggested_size_usdc"]
+            ),
             "why_now": message,
+            "kill_criteria_text": (
+                primary_parsed.kill_criteria_text
+                if primary_parsed
+                else source_alert["kill_criteria_text"]
+            ),
+            "evidence_fresh_until": primary_parsed.evidence_fresh_until if primary_parsed else None,
+            "recheck_required_at": primary_parsed.recheck_required_at if primary_parsed else None,
             "status": "active",
             "telegram_chat_id": message_ref.chat_id if message_ref else None,
             "telegram_message_id": message_ref.message_id if message_ref else None,
-            "dedupe_key": f"monitor::{payload['trigger_id']}::{now_iso}",
+            "dedupe_key": f"monitor::{payloads[0]['alert_id']}::{run_id}",
             "created_at": now_iso,
         }
     )
     return monitor_alert_id
+
+
+def _pick_primary_parsed(parsed_results: list[ParsedJudgment]) -> ParsedJudgment | None:
+    if not parsed_results:
+        return None
+
+    def _score(parsed: ParsedJudgment) -> tuple[int, int]:
+        text = " ".join(
+            part
+            for part in [parsed.summary, parsed.why_now, parsed.thesis, parsed.watch_item]
+            if part
+        )
+        has_cjk = any("\u4e00" <= char <= "\u9fff" for char in text)
+        return (1 if has_cjk else 0, len(text))
+
+    return max(parsed_results, key=_score)
+
+
+def _joined_suggested_actions(payloads: list[dict[str, object]]) -> str | None:
+    actions: list[str] = []
+    seen: set[str] = set()
+    for payload in payloads:
+        raw = payload.get("suggested_action")
+        if raw is None:
+            continue
+        text = str(raw).strip()
+        if not text or text in seen:
+            continue
+        actions.append(text)
+        seen.add(text)
+    if not actions:
+        return None
+    return " / ".join(actions)
 
 
 def _judge_monitor_recheck(

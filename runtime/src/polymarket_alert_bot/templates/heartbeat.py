@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+_SLEEVE_LABELS = {
+    "hot_board": "热榜",
+    "short_dated": "短期限",
+    "newly_listed": "新上市",
+    "family_inconsistency": "家族结构异常",
+    "anchor_gap": "外部锚偏离",
+    "unassigned": "未分类",
+}
+
 
 def _as_text(value: Any, *, default: str = "-") -> str:
     if value is None:
@@ -36,11 +45,11 @@ def _render_sleeve_counts(counts: Mapping[str, Any]) -> str:
         value = counts.get(sleeve)
         if value in (None, 0, "0"):
             continue
-        parts.append(f"{sleeve}={value}")
+        parts.append(f"{_SLEEVE_LABELS.get(sleeve, sleeve)}={value}")
     for sleeve, value in counts.items():
         if sleeve in ordered or value in (None, 0, "0"):
             continue
-        parts.append(f"{sleeve}={value}")
+        parts.append(f"{_SLEEVE_LABELS.get(sleeve, sleeve)}={value}")
     return " | ".join(parts) if parts else "-"
 
 
@@ -78,23 +87,23 @@ def render_heartbeat(payload: Mapping[str, Any]) -> str:
         or archive_payload.get("reason")
     )
 
-    mode = "DEGRADED" if degraded else "HEARTBEAT"
+    title = "[扫描降级]" if degraded else "[扫描心跳]"
     return "\n".join(
         [
-            f"[{mode}]",
-            f"scan run: {_as_text(scan_run_id)}",
-            f"monitor run: {_as_text(monitor_run_id)}",
-            "events/contracts/shortlist/retrieved/promoted: "
+            title,
+            f"scan run：{_as_text(scan_run_id)}",
+            f"monitor run：{_as_text(monitor_run_id)}",
+            "事件/合约/候选/检索/晋级："
             f"{_as_text(scanned_events)}/{_as_text(scanned_contracts)}/"
             f"{_as_text(shortlisted_candidates)}/{_as_text(retrieved_shortlist_candidates)}/"
             f"{_as_text(promoted_seed_count)}",
-            "families/flagged families/flagged candidates: "
+            "家族/结构异常家族/结构异常候选："
             f"{_as_text(scanned_families)}/{_as_text(families_with_structural_flags)}/"
             f"{_as_text(structurally_flagged_candidates)}",
-            f"strict/research/skipped: {_as_text(strict_count)}/{_as_text(research_count)}/{_as_text(skipped_count)}",
-            f"sleeves input: {_render_sleeve_counts(sleeve_input_counts)}",
-            f"sleeves shortlist: {_render_sleeve_counts(sleeve_shortlist_counts)}",
-            f"sleeves promoted: {_render_sleeve_counts(sleeve_promoted_counts)}",
-            f"reason: {_as_text(degraded_reason)}",
+            f"strict/research/skipped：{_as_text(strict_count)}/{_as_text(research_count)}/{_as_text(skipped_count)}",
+            f"输入 sleeve：{_render_sleeve_counts(sleeve_input_counts)}",
+            f"入围 sleeve：{_render_sleeve_counts(sleeve_shortlist_counts)}",
+            f"晋级 sleeve：{_render_sleeve_counts(sleeve_promoted_counts)}",
+            f"原因：{_as_text(degraded_reason)}",
         ]
     )

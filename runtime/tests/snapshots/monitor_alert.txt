@@ -1,6 +1,5 @@
-[MONITOR]
-thesis: NO position relies on rumor premium mean reversion.
-trigger: price_reprice
-state: fired
-observation: YES ask touched 55c; threshold was 52c.
-suggested action: Re-check edge and tighten max entry before adding size.
+[监控]
+结论：NO position relies on rumor premium mean reversion.
+建议动作：Re-check edge and tighten max entry before adding size.
+触发项：
+- 价格重估（price_reprice）｜状态 fired｜动作 Re-check edge and tighten max entry before adding size.｜观察 YES ask touched 55c; threshold was 52c.
