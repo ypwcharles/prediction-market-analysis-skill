@@ -77,3 +77,43 @@ def test_build_render_payload_does_not_fabricate_external_anchor_from_model_fair
     assert payload["anchor_stack"]["external_anchor_cents"] is None
     assert payload["anchor_stack"]["rule_adjusted_payout_cents"] == 52.0
     assert payload["anchor_stack"]["anchor_gap_cents"] == 10.0
+
+
+def test_build_render_payload_uses_market_quote_not_recommended_entry_as_anchor() -> None:
+    parsed = ParsedJudgment(
+        alert_kind="strict",
+        cluster_action="update",
+        ttl_hours=1,
+        theoretical_edge_cents=10.0,
+        max_entry_cents=42.0,
+        citations=[],
+        triggers=[],
+        archive_payload={},
+    )
+    seed = SimpleNamespace(
+        market_link=None,
+        event_slug="fed-cuts-2026",
+        market_slug="fed-cut-by-june",
+        expression_summary="Will the Fed cut rates by June?",
+        scan_sleeves=(),
+        ranking_summary={},
+        best_ask_cents=55.0,
+        mid_cents=54.0,
+        last_price_cents=53.0,
+        external_anchor_cents=None,
+        external_anchor_gap_cents=None,
+    )
+
+    payload = _build_render_payload(
+        seed,
+        parsed,
+        "strict",
+        "2026-04-23T12:00:00+00:00",
+        "2026-04-23T18:00:00+00:00",
+        "cluster-fed",
+    )
+
+    assert payload["anchor_stack"]["market_price_anchor_cents"] == 55.0
+    assert payload["anchor_stack"]["rule_adjusted_payout_cents"] == 65.0
+    assert payload["anchor_stack"]["execution_adjusted_fair_entry_cents"] == 42.0
+    assert payload["anchor_stack"]["anchor_gap_cents"] == 10.0

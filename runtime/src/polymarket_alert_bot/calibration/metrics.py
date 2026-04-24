@@ -6,6 +6,7 @@ import sqlite3
 from collections.abc import Mapping
 
 HIGH_PRIORITY_ALERT_KINDS = ("strict", "strict_degraded", "reprice")
+PRODUCTION_READY_ALERT_KINDS = ("strict", "reprice")
 SHORT_REVIEW_DAYS = 3
 MEDIUM_REVIEW_DAYS = 14
 
@@ -18,6 +19,14 @@ def build_calibration_summary(conn: sqlite3.Connection) -> dict[str, int | float
         WHERE alert_kind IN (?, ?, ?)
         """,
         HIGH_PRIORITY_ALERT_KINDS,
+    ).fetchone()[0]
+    production_candidate_alerts = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM alerts
+        WHERE alert_kind IN (?, ?)
+        """,
+        PRODUCTION_READY_ALERT_KINDS,
     ).fetchone()[0]
     distinct_clusters = conn.execute(
         """
@@ -39,9 +48,20 @@ def build_calibration_summary(conn: sqlite3.Connection) -> dict[str, int | float
 
     production_override = os.environ.get("POLYMARKET_ALERT_BOT_ALLOW_PRODUCTION_REPORT") == "1"
 
+    production_gate_clear = (
+        production_override
+        and repeated_cluster_discount == 0
+        and production_candidate_alerts > 0
+        and int(scan_metrics["scan_run_count"]) > 0
+        and int(scan_metrics["scanned_contracts_total"]) > 0
+        and int(scan_metrics["degraded_scan_run_count"]) == 0
+        and int(trust_metrics["stale_alert_count"]) == 0
+        and int(trust_metrics["disagree_feedback_count"]) == 0
+    )
+
     if total_high_priority_alerts == 0 or distinct_clusters == 0:
         status = "not_ready"
-    elif production_override and repeated_cluster_discount == 0:
+    elif production_gate_clear:
         status = "ready_for_production"
     else:
         status = "ready_for_limited_trial"
@@ -49,6 +69,7 @@ def build_calibration_summary(conn: sqlite3.Connection) -> dict[str, int | float
     return {
         "status": status,
         "total_high_priority_alerts": total_high_priority_alerts,
+        "production_candidate_alerts": production_candidate_alerts,
         "distinct_clusters": distinct_clusters,
         "repeated_cluster_discount": repeated_cluster_discount,
         "quality_score": quality_score,
