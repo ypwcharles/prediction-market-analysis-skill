@@ -279,24 +279,32 @@ def _overlay_running_jobs(
         job_state = jobs.get(run_type)
         if not isinstance(job_state, dict) or not job_state.get("is_running"):
             continue
+        job_started_at = job_state.get("last_started_at")
+        if not isinstance(job_started_at, str):
+            continue
         if latest_run is None:
-            merged[run_type] = {
-                "id": None,
-                "status": "running",
-                "started_at": job_state.get("last_started_at"),
-                "finished_at": None,
-                "degraded_reason": None,
-                "created_at": job_state.get("last_started_at"),
-            }
+            merged[run_type] = _running_job_payload(job_started_at)
             continue
         latest_started_at = latest_run.get("started_at")
-        job_started_at = job_state.get("last_started_at")
-        if not isinstance(latest_started_at, str) or not isinstance(job_started_at, str):
+        if not isinstance(latest_started_at, str):
+            merged[run_type] = _running_job_payload(job_started_at)
             continue
         if latest_started_at < job_started_at:
+            merged[run_type] = _running_job_payload(job_started_at)
             continue
         merged_run = dict(latest_run)
         merged_run["status"] = "running"
         merged_run["finished_at"] = None
         merged[run_type] = merged_run
     return merged
+
+
+def _running_job_payload(started_at: str) -> dict[str, object]:
+    return {
+        "id": None,
+        "status": "running",
+        "started_at": started_at,
+        "finished_at": None,
+        "degraded_reason": None,
+        "created_at": started_at,
+    }
