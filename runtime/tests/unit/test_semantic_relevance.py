@@ -6,6 +6,7 @@ from polymarket_alert_bot.scanner.board_scan import AlertSeed
 from polymarket_alert_bot.scanner.family import CandidateFamilySummary, FamilyMarketSummary
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
 from polymarket_alert_bot.sources.semantic_relevance import (
+    SEMANTIC_RELEVANCE_CONTRACT_VERSION,
     ParseError,
     SemanticRelevanceAdapter,
     parse_semantic_relevance_result,
@@ -54,6 +55,19 @@ def test_parse_semantic_relevance_result_rejects_non_object_payload() -> None:
         pass
     else:
         raise AssertionError("expected ParseError")
+
+
+def test_semantic_relevance_adapter_emits_v2_contract_version() -> None:
+    adapter = SemanticRelevanceAdapter(
+        enabled=True,
+        timeout_seconds=5,
+        max_items=6,
+    )
+
+    payload = adapter.build_payload(seed=_seed(), evidence_items=_evidence_items())
+
+    assert SEMANTIC_RELEVANCE_CONTRACT_VERSION == "semantic_relevance.v2"
+    assert payload["contract_version"] == "semantic_relevance.v2"
 
 
 def test_semantic_relevance_adapter_filters_and_marks_conflicts() -> None:

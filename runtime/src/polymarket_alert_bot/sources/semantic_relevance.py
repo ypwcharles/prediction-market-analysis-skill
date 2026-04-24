@@ -14,7 +14,7 @@ from polymarket_alert_bot.scanner.board_scan import AlertSeed
 from polymarket_alert_bot.sources.evidence_enricher import EvidenceItem
 
 DEFAULT_EXTERNAL_RUNNER_ENV = "POLYMARKET_ALERT_BOT_SEMANTIC_RELEVANCE_RUNNER_CMD"
-SEMANTIC_RELEVANCE_CONTRACT_VERSION = "semantic_relevance.v1"
+SEMANTIC_RELEVANCE_CONTRACT_VERSION = "semantic_relevance.v2"
 
 SemanticRunner = Callable[[dict[str, Any], int], dict[str, Any] | str]
 ExternalCommandRunner = Callable[[list[str], str, int], dict[str, Any] | str]

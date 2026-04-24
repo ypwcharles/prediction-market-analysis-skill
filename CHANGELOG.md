@@ -7,7 +7,7 @@ All notable changes to this repository are tracked here.
 ### Changed
 
 - Changed strict memo anchor accounting so market price anchors come from live market quotes or explicit market-anchor payload fields, while model max-entry recommendations stay in fair-entry accounting.
-- Changed semantic relevance filtering so same-claim decisions only apply across sources when the runner explicitly marks them as claim-level decisions.
+- Changed semantic relevance filtering to `semantic_relevance.v2`, where same-claim decisions only apply across sources when the runner explicitly marks them as claim-level decisions.
 - Changed calibration readiness so production status requires real clean scan coverage and clean operator-trust signals, not just a manual report override.
 
 ### Fixed
