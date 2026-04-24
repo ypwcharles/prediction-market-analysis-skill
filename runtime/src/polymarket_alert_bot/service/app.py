@@ -249,6 +249,7 @@ def _build_status_payload(
         conn.close()
 
     scheduler_snapshot = scheduler.snapshot()
+    latest_runs = _overlay_running_jobs(latest_runs, scheduler_snapshot)
     return {
         "service": {
             "host": runtime_config.service_host,
@@ -264,3 +265,38 @@ def _build_status_payload(
         "counts": counts,
         "scheduler": scheduler_snapshot,
     }
+
+
+def _overlay_running_jobs(
+    latest_runs: dict[str, dict[str, object] | None], scheduler_snapshot: dict[str, object]
+) -> dict[str, dict[str, object] | None]:
+    jobs = scheduler_snapshot.get("jobs") if isinstance(scheduler_snapshot, dict) else None
+    if not isinstance(jobs, dict):
+        return latest_runs
+
+    merged = dict(latest_runs)
+    for run_type, latest_run in latest_runs.items():
+        job_state = jobs.get(run_type)
+        if not isinstance(job_state, dict) or not job_state.get("is_running"):
+            continue
+        if latest_run is None:
+            merged[run_type] = {
+                "id": None,
+                "status": "running",
+                "started_at": job_state.get("last_started_at"),
+                "finished_at": None,
+                "degraded_reason": None,
+                "created_at": job_state.get("last_started_at"),
+            }
+            continue
+        latest_started_at = latest_run.get("started_at")
+        job_started_at = job_state.get("last_started_at")
+        if not isinstance(latest_started_at, str) or not isinstance(job_started_at, str):
+            continue
+        if latest_started_at < job_started_at:
+            continue
+        merged_run = dict(latest_run)
+        merged_run["status"] = "running"
+        merged_run["finished_at"] = None
+        merged[run_type] = merged_run
+    return merged

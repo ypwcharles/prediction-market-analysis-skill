@@ -10,6 +10,8 @@ from fastapi import FastAPI
 from polymarket_alert_bot.runtime_flow import MonitorFlowSummary, ScanFlowSummary
 from polymarket_alert_bot.service.app import create_app
 from polymarket_alert_bot.service.auth import TELEGRAM_SECRET_HEADER
+from polymarket_alert_bot.storage.db import connect_db
+from polymarket_alert_bot.storage.migrations import apply_migrations
 
 INTERNAL_BEARER_TOKEN = "test-internal-bearer"
 TELEGRAM_WEBHOOK_SECRET = "test-telegram-secret"
@@ -100,6 +102,44 @@ def test_status_requires_bearer_auth(tmp_path, monkeypatch):
     assert body["scheduler"]["jobs"]["scan"]["run_immediately"] is True
     assert body["scheduler"]["jobs"]["monitor"]["run_immediately"] is False
     assert body["scheduler"]["jobs"]["report"]["run_immediately"] is False
+
+
+def test_status_marks_latest_scan_as_running_when_scheduler_job_is_active(tmp_path, monkeypatch):
+    app = _build_app(tmp_path, monkeypatch)
+    conn = connect_db(tmp_path / ".runtime-data" / "sqlite" / "runtime.sqlite3")
+    apply_migrations(conn)
+    conn.execute(
+        """
+        INSERT INTO runs (id, run_type, status, started_at, finished_at, degraded_reason, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            "scan-run-provisional",
+            "scan",
+            "degraded",
+            "2026-04-24T13:37:47.531026+00:00",
+            "2026-04-24T13:37:47.531026+00:00",
+            "executable_checks_partial",
+            "2026-04-24T13:37:47.531026+00:00",
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    with app.state.scheduler._state_lock:
+        app.state.scheduler._job_state["scan"]["is_running"] = True
+        app.state.scheduler._job_state["scan"]["last_started_at"] = (
+            "2026-04-24T13:37:47.528706+00:00"
+        )
+        app.state.scheduler._job_state["scan"]["last_finished_at"] = None
+
+    response = _request(app, "GET", "/status", headers=_bearer_header(INTERNAL_BEARER_TOKEN))
+
+    assert response.status_code == 200
+    scan = response.json()["latest_runs"]["scan"]
+    assert scan["id"] == "scan-run-provisional"
+    assert scan["status"] == "running"
+    assert scan["finished_at"] is None
 
 
 @pytest.mark.parametrize(
