@@ -14,7 +14,11 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self._raise_http:
-            raise httpx.HTTPStatusError("boom", request=None, response=None)
+            raise httpx.HTTPStatusError(
+                "boom",
+                request=httpx.Request("GET", "https://clob.example.test/book"),
+                response=httpx.Response(self.status_code),
+            )
 
     def json(self):
         return self._payload
@@ -129,10 +133,33 @@ def test_fetch_book_retries_once_on_transient_http_error() -> None:
     assert snapshot.degraded_reason is None
 
 
-def test_fetch_book_does_not_retry_http_status_errors() -> None:
+def test_fetch_book_retries_transient_http_status_errors() -> None:
     client = _FlakyClient(
         [
-            _FakeResponse({}, raise_http=True),
+            _FakeResponse({}, status_code=502, raise_http=True),
+            _FakeResponse(
+                {
+                    "bids": [{"price": "0.40"}],
+                    "asks": [{"price": "0.42"}],
+                }
+            ),
+        ]
+    )
+
+    snapshot = fetch_book("token-1", http_client=client, url="https://clob.example.test/book")
+
+    assert client.calls == [
+        ("https://clob.example.test/book", {"token_id": "token-1"}),
+        ("https://clob.example.test/book", {"token_id": "token-1"}),
+    ]
+    assert snapshot.is_degraded is False
+    assert snapshot.degraded_reason is None
+
+
+def test_fetch_book_does_not_retry_non_transient_http_status_errors() -> None:
+    client = _FlakyClient(
+        [
+            _FakeResponse({}, status_code=400, raise_http=True),
             _FakeResponse(
                 {
                     "bids": [{"price": "0.40"}],

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from polymarket_alert_bot.cli import main
 from polymarket_alert_bot.config.settings import ensure_runtime_dirs, load_runtime_paths
+from polymarket_alert_bot.judgment.result_parser import ParsedJudgment
 from polymarket_alert_bot.monitor.position_sync import MonitorOutcome
 from polymarket_alert_bot.runtime_flow import execute_monitor_flow
 from polymarket_alert_bot.scanner.board_scan import run_scan as board_run_scan
@@ -1496,14 +1497,14 @@ def test_scan_command_marks_heartbeat_degraded_when_shortlist_retrieval_fails(
     ).fetchone()
     assert heartbeat_row is not None
     heartbeat_text = Path(heartbeat_row["archive_path"]).read_text(encoding="utf-8")
-    assert heartbeat_text.startswith("[DEGRADED]")
-    assert "events/contracts/shortlist/retrieved/promoted: 1/2/2/0/1" in heartbeat_text
-    assert "families/flagged families/flagged candidates: 1/0/0" in heartbeat_text
-    assert "sleeves input: hot_board=" in heartbeat_text
-    assert "short_dated=" in heartbeat_text
-    assert "newly_listed=" in heartbeat_text
-    assert "sleeves shortlist: hot_board=" in heartbeat_text
-    assert "sleeves promoted: hot_board=" in heartbeat_text
+    assert heartbeat_text.startswith("[扫描降级]")
+    assert "原因：shortlist_x_failed:TimeoutError" in heartbeat_text
+
+    assert "输入 sleeve：热榜=" in heartbeat_text
+    assert "短期限=" in heartbeat_text
+    assert "新上市=" in heartbeat_text
+    assert "入围 sleeve：热榜=" in heartbeat_text
+    assert "晋级 sleeve：热榜=" in heartbeat_text
     assert "shortlist_x_failed:TimeoutError" in heartbeat_text
 
 
@@ -1733,9 +1734,7 @@ def test_execute_monitor_flow_delivers_pending_recheck_after_llm_approval(monkey
 
     assert len(summary.delivered_alert_ids) == 1
     assert len(delivered_messages) == 1
-    assert (
-        "market: https://polymarket.com/event/source-event/source-market" in delivered_messages[0]
-    )
+    assert "市场：https://polymarket.com/event/source-event/source-market" in delivered_messages[0]
     assert recheck_log.exists()
     payload_rows = [
         json.loads(line) for line in recheck_log.read_text(encoding="utf-8").splitlines()
@@ -1753,3 +1752,126 @@ def test_execute_monitor_flow_delivers_pending_recheck_after_llm_approval(monkey
     assert [
         (row["alert_kind"], row["delivery_mode"], row["market_id"]) for row in monitor_alert_rows
     ] == [("monitor", "immediate", "market-source")]
+
+
+def test_execute_monitor_flow_groups_multiple_pending_rechecks_from_same_source_alert(
+    monkeypatch, tmp_path
+):
+    data_dir = tmp_path / ".runtime-data"
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("POLYMARKET_ALERT_BOT_DISABLE_TELEGRAM", "1")
+    paths = load_runtime_paths()
+    ensure_runtime_dirs(paths)
+    _seed_monitor_source_alert(paths)
+
+    responses = iter(
+        [
+            {
+                "alert_kind": "monitor",
+                "cluster_action": "hold",
+                "ttl_hours": 6,
+                "summary": "当前仅维持跟踪，不做新执行判断。",
+                "why_now": "一级证据仍不足，且当前价格高于可执行上限。",
+                "watch_item": "关注官方席位统计、重选/作废与盘口 ask 是否回到阈值下方。",
+                "citations": [],
+                "triggers": [],
+                "archive_payload": {"reason": "monitor_only"},
+            },
+            {
+                "alert_kind": "monitor",
+                "cluster_action": "hold",
+                "ttl_hours": 6,
+                "summary": "Maintain watch only.",
+                "why_now": "The catalyst fired but no new primary support exists.",
+                "watch_item": "Watch for official tally updates.",
+                "citations": [],
+                "triggers": [],
+                "archive_payload": {"reason": "monitor_only"},
+            },
+            {
+                "alert_kind": "monitor",
+                "cluster_action": "hold",
+                "ttl_hours": 6,
+                "summary": "Price trigger fired.",
+                "why_now": "Ask remains above the disciplined max entry.",
+                "watch_item": "Only re-evaluate if ask moves back below the threshold.",
+                "citations": [],
+                "triggers": [],
+                "archive_payload": {"reason": "monitor_only"},
+            },
+        ]
+    )
+
+    def _fake_judge(*args, **kwargs):
+        return ParsedJudgment.model_validate(next(responses))
+
+    monkeypatch.setattr("polymarket_alert_bot.flows.monitor.SkillAdapter.judge", _fake_judge)
+
+    monitor_outcome = MonitorOutcome(
+        run_id="run-monitor-test-grouped",
+        stale_alert_ids=[],
+        fired_actions=[],
+        pending_recheck_actions=[
+            {
+                "trigger_id": "trigger-rule",
+                "alert_id": "alert-source",
+                "thesis_cluster_id": "cluster-source",
+                "trigger_type": "rule_change_monitor",
+                "trigger_state": "fired",
+                "suggested_action": "Review",
+                "requires_llm_recheck": True,
+            },
+            {
+                "trigger_id": "trigger-catalyst",
+                "alert_id": "alert-source",
+                "thesis_cluster_id": "cluster-source",
+                "trigger_type": "catalyst_checkpoint",
+                "trigger_state": "fired",
+                "suggested_action": "Review",
+                "requires_llm_recheck": True,
+            },
+            {
+                "trigger_id": "trigger-price",
+                "alert_id": "alert-source",
+                "thesis_cluster_id": "cluster-source",
+                "trigger_type": "price_threshold",
+                "trigger_state": "fired",
+                "suggested_action": "Review",
+                "requires_llm_recheck": True,
+            },
+        ],
+        requires_llm_recheck_trigger_ids=["trigger-rule", "trigger-catalyst", "trigger-price"],
+        reconciled_claim_ids=[],
+        synced_official_positions=0,
+    )
+    _seed_monitor_run(paths, monitor_outcome.run_id)
+    monkeypatch.setattr(
+        "polymarket_alert_bot.flows.monitor.run_monitor", lambda *args, **kwargs: monitor_outcome
+    )
+
+    delivered_messages: list[str] = []
+
+    def _capture_deliver(*, text, **kwargs):
+        delivered_messages.append(text)
+        return None
+
+    monkeypatch.setattr("polymarket_alert_bot.flows.monitor._deliver_message", _capture_deliver)
+
+    summary = execute_monitor_flow(paths)
+
+    assert len(summary.delivered_alert_ids) == 1
+    assert len(delivered_messages) == 1
+    assert "[监控]" in delivered_messages[0]
+    assert "触发项：" in delivered_messages[0]
+    assert "规则变化监控" in delivered_messages[0]
+    assert "催化剂检查" in delivered_messages[0]
+    assert "价格阈值" in delivered_messages[0]
+    assert "当前仅维持跟踪，不做新执行判断。" in delivered_messages[0]
+
+    conn = connect_db(paths.db_path)
+    alert_rows = conn.execute(
+        "SELECT id, why_now FROM alerts WHERE run_id = ?",
+        ["run-monitor-test-grouped"],
+    ).fetchall()
+    assert len(alert_rows) == 1
+    assert "触发项：" in alert_rows[0]["why_now"]

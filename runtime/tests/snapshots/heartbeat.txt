@@ -1,10 +1,10 @@
-[DEGRADED]
-scan run: run-scan-001
-monitor run: run-monitor-001
-events/contracts/shortlist/retrieved/promoted: 12/48/6/3/5
-families/flagged families/flagged candidates: 12/4/9
-strict/research/skipped: 2/4/19
-sleeves input: hot_board=12 | short_dated=5 | newly_listed=2 | family_inconsistency=4
-sleeves shortlist: hot_board=3 | short_dated=2 | family_inconsistency=1
-sleeves promoted: hot_board=2 | short_dated=1 | family_inconsistency=2
-reason: news source timeout, monitor still healthy
+[扫描降级]
+scan run：run-scan-001
+monitor run：run-monitor-001
+事件/合约/候选/检索/晋级：12/48/6/3/5
+家族/结构异常家族/结构异常候选：12/4/9
+strict/research/skipped：2/4/19
+输入 sleeve：热榜=12 | 短期限=5 | 新上市=2 | 家族结构异常=4
+入围 sleeve：热榜=3 | 短期限=2 | 家族结构异常=1
+晋级 sleeve：热榜=2 | 短期限=1 | 家族结构异常=2
+原因：news source timeout, monitor still healthy
