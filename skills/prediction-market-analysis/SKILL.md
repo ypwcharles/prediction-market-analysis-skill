@@ -1,6 +1,6 @@
 ---
 name: prediction-market-analysis
-description: Use when analyzing Polymarket, Kalshi, or related prediction-market contracts for tradeability, fair odds, bucket selection, contract expression, cross-market comparisons, or Kelly-based sizing. Trigger when the user asks to analyze a specific market, scan a theme or event for opportunities, compare adjacent time buckets or equivalent expressions, decide which contract best fits a thesis, review a past prediction-market trade for direction-vs-timing mistakes, estimate a probability range, reject an over-specific timing market, or size a prediction-market position conservatively.
+description: Use when analyzing Polymarket, Kalshi, or related prediction-market contracts for tradeability, edge, expression selection, smart-money signals, account-style reviews, held-position management, timing buckets, or Kelly sizing. Trigger on market URLs, theme scans, adjacent-bucket comparisons, copy-trade questions, historical win-rate/payoff reviews, or bankroll-aware sizing.
 ---
 
 # Prediction Market Analysis
@@ -17,6 +17,7 @@ Default posture:
 - separate direction edge from timing edge
 - prefer the cleaner expression over the more exciting expression
 - size only from conservative edge
+- preserve a proven user style instead of forcing higher-variance trades
 
 ## When to Use
 
@@ -32,6 +33,8 @@ Use this skill when the user wants to:
 - size a position using Kelly or fractional Kelly
 - review a past or proposed trade for bucket-selection, expression, or sizing mistakes
 - re-evaluate a proposed trade in the context of existing exposure
+- analyze a wallet, account, or personal trading history for style, win rate, payoff ratio, or strategy fit
+- judge whether a smart-money, insider, whale, or alert-bot signal is worth following
 
 Do not use this skill for:
 
@@ -47,6 +50,7 @@ Do not use this skill for:
 4. Intervals beat false precision. Always produce a main probability plus a confidence interval.
 5. Conservative Kelly only. Size from the conservative boundary, never the central estimate.
 6. Portfolio-aware by default. A good isolated trade can still be a bad portfolio trade.
+7. Strategy-fit matters. A trade outside the user's proven edge lanes needs a stronger evidence bar and a smaller size.
 
 ## Operating Modes
 
@@ -109,6 +113,25 @@ Use when the input is a past or proposed trade and the goal is to identify wheth
 - sizing
 - execution
 
+### Account Style / Wallet Review
+
+Use when the input is a wallet, account link, trade history, bankroll update, or request to improve a trading style.
+
+Separate:
+
+- closed market-level realized PnL
+- open mark-to-market PnL
+- current exposure and concentration
+- win rate
+- payoff ratio
+- profit factor
+- average win and average loss
+- strategy lanes where profits actually came from
+
+For Polymarket account review, aggregate by `conditionId` or market slug before quoting win rate, payoff ratio, or realized PnL. Outcome-token rows can double-count or misclassify market results.
+
+If the user has a high-win-rate / low-payoff profile, do not reflexively recommend buying longer-shot contracts to "improve odds." Prefer preserving the hit-rate edge while reducing average loss through smaller hazardous positions, earlier thesis stop-losses, and better entry discipline.
+
 ## Trade Archetypes
 
 Classify the setup before doing directional work. Every trade must start in exactly one primary bucket:
@@ -161,6 +184,21 @@ Prioritize:
 
 If contracts differ in named actors, settlement verbs, or event scope, default to this archetype unless the rule text is otherwise identical apart from the deadline.
 
+### 5. Smart-Money Signal
+
+The edge comes from another wallet, PolyBeats-style alert, insider signal, large trade, whale position, or copy-trade cue.
+
+Prioritize:
+
+- whether the wallet has a verified profitable history in this market type
+- whether the trade is large relative to that wallet, not just large in absolute dollars
+- whether multiple high-quality wallets are independently taking the same side
+- whether the wallet is laddering, hedging, trimming, or trading a different expression
+- whether the signal maps directly to the written settlement rule
+- whether the current price still has edge after the alert-driven move
+
+A smart-money signal can justify a watchlist or observation position by itself. It cannot justify a conviction position unless independent evidence and rule-fit also support the trade.
+
 ## Workflow
 
 ### 1. Normalize the input
@@ -173,6 +211,8 @@ Extract or infer:
 - settlement time horizon
 - bankroll or position constraints
 - existing portfolio context when provided
+- account-style context when the user provides trade history, wallet data, or a stated bankroll
+- smart-money or copy-trade signal source when it is part of the thesis
 - whether the user is asking for analysis, discovery, or post-trade review
 
 ### 2. Classify the trade archetype
@@ -183,13 +223,24 @@ Decide whether the setup is:
 - `directional event`
 - `time-bucket trade`
 - `cross-bucket structure`
+- `smart-money signal`
 
 Do not analyze a resolution arb like a normal prediction trade.
 Do not analyze a time-bucket trade as if direction alone were sufficient.
 If nearby contracts differ in named actors, settlement verbs, or event scope, treat that as a rule-scope problem before treating it as a pure timing problem.
 If both deadline and rule scope differ, classify as `cross-bucket structure`, not `time-bucket trade`.
+If the user's reason for entry is primarily "a wallet bought this," classify the setup as `smart-money signal` first, then test whether it also qualifies as another archetype.
 
 ### 3. Discover the full expression set
+
+For Polymarket, use the API-first data path before relying on the website UI:
+
+- Single market: resolve URL or slug through Gamma public search, market slug, or event slug; pull Gamma rule text and resolution fields; pull CLOB V2 full order book from `https://clob.polymarket.com`; read fee metadata before pricing.
+- Theme scan: start with Gamma `public-search?q=...` to find relevant events and markets, then expand adjacent expressions through Gamma keyset endpoints.
+- Broad board scan: use Gamma `/markets/keyset` or `/events/keyset` cursor pagination with `next_cursor` / `after_cursor`; do not depend on offset pagination or one shallow `/markets` pull.
+- Report coverage for scans: pages fetched, raw markets/events reviewed, tradable markets, and strict survivors. If coverage is partial, say exactly where it stopped.
+- Account or wallet review: use Data API positions and activity to recover exposure, average entry, realized / unrealized PnL, and related positions before giving sizing advice.
+- Monitoring or held-position review: use CLOB WebSocket market-channel events or a fresh CLOB book timestamp for orderbook, price change, trade, best bid/ask, resolved, and new-market events; do not trust stale page quotes.
 
 For a single market, enrich the analysis with:
 
@@ -228,6 +279,17 @@ Actively search:
 - expert social sources
 
 Use `references/evidence-engine.md` for source tiers, timing-vs-direction evidence, archetype-specific standards, and conflict handling.
+
+For smart-money or alert-bot evidence, inspect the wallet context before using the signal:
+
+- full current positions and recent activity
+- realized vs open PnL when available
+- whether this is a single-market fresh wallet
+- whether buys are offset by sells, opposing-leg exposure, or adjacent-bucket ladders
+- whether several alerts are actually the same wallet or a follower cascade
+- whether strong opposing wallets are taking the other side
+
+Treat wallet alerts as market-native evidence, not as primary factual evidence about the real-world event.
 
 ### 6. Separate direction edge from timing edge
 
@@ -270,11 +332,14 @@ Do not treat market price as literal truth.
 
 Compare the conservative fair value implied by the interval against the best realistic executable price after:
 
-- fees
+- CLOB V2 fees: read `feesEnabled`, `feeSchedule`, `feeType`, `makerBaseFee`, and `takerBaseFee`; maker orders may be free while taker fills pay match-time fees
 - spread
-- slippage
+- full-book slippage for the intended order size, not just best bid / best ask or half-spread approximation
+- tick size, minimum order size, and whether the market is accepting orders
 - execution uncertainty
 - timing-mismatch risk
+
+For Polymarket, executable price means: simulate the intended fill through full CLOB depth, apply taker fee when crossing the book, respect tick/min-size constraints, then compare net entry against conservative fair value. If the edge only exists at midpoint or displayed last price, return `NO TRADE`.
 
 If edge disappears after costs and timing risk, return `NO TRADE`.
 
@@ -288,8 +353,18 @@ Inspect:
 - thematic concentration
 - tail-risk concentration
 - same-calendar clustering
+- strategy-lane concentration against the user's proven strengths and weaknesses
 
 If portfolio context is unavailable, apply the portfolio-blind haircut from `references/probability-and-kelly.md` and say so explicitly.
+
+If the user has a calibrated style history, label the trade as one of:
+
+- `core lane` - matches repeatedly profitable categories or structures
+- `adjacent lane` - related but less proven
+- `hazard lane` - historically loss-prone, noisy, or easy to express in the wrong bucket
+- `lottery lane` - low-probability position whose main value is optionality, not evidence-backed edge
+
+Use this label to adjust evidence bar, sizing, and kill criteria.
 
 ### 11. Size or structure conservatively
 
@@ -306,6 +381,18 @@ Use:
 - time-precision haircut
 
 If the best expression is a ladder or split structure rather than a single contract, recommend that instead of forcing a one-line answer.
+
+When a user has a high-win-rate / low-payoff style, size to preserve that style:
+
+- Core lanes can receive normal conservative-Kelly sizing if the edge is independently verified.
+- Adjacent lanes require a strategy-fit haircut.
+- Hazard lanes should usually be observation size unless rule-level evidence is unusually strong.
+- Smart-money-only trades are observation size until the wallet signal is independently confirmed.
+- Lottery lanes should be capped at a small fixed loss the user is comfortable writing to zero.
+
+If the user gives a current bankroll, use that explicit bankroll for concrete sizing. Do not infer bankroll from visible open positions or historical capital unless the user asks for that estimate.
+
+Improving payoff ratio should usually mean cutting losers earlier and entering cleaner expressions, not buying lower-probability long shots.
 
 ### 12. Emit mode-specific final decision
 
@@ -350,6 +437,7 @@ Before writing any substantive content, first emit the exact eight section heade
 - market title
 - market link
 - trade archetype
+- strategy-fit lane
 - expression / rule-scope differences
 - settlement rule
 - settlement time
@@ -366,6 +454,7 @@ Before writing any substantive content, first emit the exact eight section heade
 ### 4. Evidence Review
 - decisive evidence
 - rule-scope differences
+- smart-money / wallet-signal quality
 - timing-specific evidence
 - directional evidence
 - conflicting evidence
@@ -385,10 +474,12 @@ Before writing any substantive content, first emit the exact eight section heade
 - related existing positions
 - incremental thematic exposure
 - concentration / correlation concerns
+- strategy-fit concerns
 
 ### 7. Sizing
 - raw Kelly
 - conservative Kelly
+- style-calibrated cap
 - preferred structure / ladder
 - final recommended fraction
 - concrete size if bankroll is provided
@@ -444,6 +535,8 @@ Approve only if:
 
 Short-dated `Yes` contracts need a higher bar than short-dated `No` contracts when timing precision is weak.
 
+For geopolitical, military, diplomatic, or crisis markets, short-dated `Yes` needs an especially high bar because narrative tension often does not map cleanly to the contract clock or settlement verb. If the evidence is mostly "something may happen soon," prefer smaller sizing, later buckets, broader expressions, or short-dated `No`.
+
 ### Cross-Bucket Structure
 
 Approve only if:
@@ -454,6 +547,25 @@ Approve only if:
 - the recommendation names which bucket, ladder, or expression is actually preferred
 
 When rule-scope differences are material, the analysis must explicitly say this is not a pure time-bucket comparison.
+
+### Smart-Money Signal
+
+Approve only if:
+
+- the signal wallet has a relevant track record or verifiable reason to be informed
+- the position is not merely a tiny probe relative to the wallet
+- the wallet is not obviously hedged, laddered across incompatible expressions, or already trimming
+- the signal maps to the exact settlement rule and deadline
+- independent real-world evidence supports the same side
+- the entry price after the alert still leaves conservative edge
+
+Reject or cap at observation size if:
+
+- the wallet is new or only visible in this one market
+- several alerts are duplicates of the same wallet or copy-traders
+- the signal is large in absolute terms but not proven to be informed
+- strong opposing flow exists from similarly credible wallets
+- the thesis is mostly narrative tension rather than rule-level evidence
 
 ## Refusal Rules
 
@@ -468,6 +580,8 @@ Return `NO TRADE` if any of the following is true:
 7. The thesis may be right, but the asked contract is the wrong expression.
 8. Timing evidence is too weak for the narrowness of the bucket.
 9. Material rule-scope differences exist but have not been analyzed.
+10. A smart-money signal cannot be validated beyond "a wallet bought this" and no independent edge remains.
+11. The setup falls in a user-specific hazard lane and the requested size is larger than observation size.
 
 ## Common Mistakes
 
@@ -480,6 +594,10 @@ Return `NO TRADE` if any of the following is true:
 - Using the central estimate for Kelly sizing.
 - Ignoring existing correlated exposure across the same narrative cluster.
 - Calling theoretical edge a real edge when execution destroys it.
+- Treating a large wallet buy as an automatic trade without checking wallet history, hedges, ladders, or opposing flow.
+- Trying to raise payoff ratio by chasing long shots instead of reducing average loss and improving expression selection.
+- Letting a smart-money observation trade become a conviction trade without independent evidence.
+- Treating geopolitical short-window `Yes` contracts as core trades when the evidence only supports general tension or eventual risk.
 
 ## References
 
