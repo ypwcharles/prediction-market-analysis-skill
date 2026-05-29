@@ -121,7 +121,7 @@ When runtime output supports optional diagnostics, use these fields when relevan
 - `model_validity`
 - `do_not_trade_reason`
 
-Use plain string values when exact numeric values are unavailable. Prefer `model_invalid` or `insufficient_history` over false precision.
+For numeric fields, use a JSON number when measured and JSON `null` when unavailable; do not use string placeholders such as `unknown`. Use string status fields such as `model_validity`, `markov_signal`, and `do_not_trade_reason` to explain uncertainty, preferring labels like `model_invalid` or `insufficient_history` over false precision.
 
 ## Walk-Forward Guardrail
 

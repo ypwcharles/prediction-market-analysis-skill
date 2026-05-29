@@ -143,6 +143,8 @@ Use these optional fields when a judgment depends on price-history, Markov-style
 - `model_validity`: concise status such as `valid`, `insufficient_history`, `sparse_transition_rows`, `structural_break`, or `stale_book`.
 - `do_not_trade_reason`: required when these diagnostics are the main reason a trade is rejected or capped to watch-only.
 
+For numeric microstructure fields, use a JSON number when measured and JSON `null` when unavailable. Do not emit string placeholders such as `unknown` for `transition_sample_count` or `maker_taker_tax_bps`; put uncertainty in `model_validity`, `markov_signal`, or `do_not_trade_reason`.
+
 Do not use these fields to replace required top-level fields. They are explanatory diagnostics that preserve why a theoretical edge is or is not executable.
 
 ## 6) Citation Rules

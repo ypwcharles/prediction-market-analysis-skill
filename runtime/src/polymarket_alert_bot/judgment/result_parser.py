@@ -187,6 +187,20 @@ class ParsedJudgment(BaseModel):
         if not isinstance(raw, dict):
             return raw
         payload = dict(raw)
+        for numeric_field in ("transition_sample_count", "maker_taker_tax_bps"):
+            value = payload.get(numeric_field)
+            if isinstance(value, str) and value.strip().lower() in {
+                "",
+                "n/a",
+                "na",
+                "none",
+                "null",
+                "not assessable from prompt",
+                "not provided",
+                "unknown",
+                "unavailable",
+            }:
+                payload[numeric_field] = None
         archive_payload = payload.get("archive_payload")
         if archive_payload is None:
             payload["archive_payload"] = {}

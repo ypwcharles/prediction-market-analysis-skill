@@ -387,6 +387,26 @@ def test_parse_judgment_result_preserves_runtime_alert_fields() -> None:
     assert parsed.do_not_trade_reason == payload["do_not_trade_reason"]
 
 
+def test_parse_judgment_result_normalizes_unavailable_numeric_microstructure_fields() -> None:
+    payload = {
+        "alert_kind": "research",
+        "cluster_action": "none",
+        "ttl_hours": 1,
+        "transition_sample_count": "unknown",
+        "maker_taker_tax_bps": "not provided",
+        "model_validity": "insufficient_history",
+        "citations": [],
+        "triggers": [],
+        "archive_payload": {},
+    }
+
+    parsed = parse_judgment_result(payload)
+
+    assert parsed.transition_sample_count is None
+    assert parsed.maker_taker_tax_bps is None
+    assert parsed.model_validity == "insufficient_history"
+
+
 def test_enricher_blocks_strict_when_only_x_sources_present() -> None:
     source_registry = load_source_registry("runtime/config/sources.toml")
     x_items = XClient().normalize_items(_load_fixture("x_samples.json"))
