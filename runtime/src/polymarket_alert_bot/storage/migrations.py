@@ -83,6 +83,7 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             slippage_bps REAL,
             max_entry_cents REAL,
             suggested_size_usdc REAL,
+            microstructure_diagnostics_json TEXT,
             why_now TEXT,
             kill_criteria_text TEXT,
             evidence_fresh_until TEXT,
@@ -192,6 +193,7 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     )
     _ensure_column(conn, "cluster_expressions", "condition_id", "TEXT")
     _ensure_column(conn, "alerts", "condition_id", "TEXT")
+    _ensure_column(conn, "alerts", "microstructure_diagnostics_json", "TEXT")
     _ensure_column(conn, "feedback", "callback_query_id", "TEXT")
     _ensure_column(conn, "runs", "scanned_families", "INTEGER DEFAULT 0")
     _ensure_column(conn, "runs", "shortlisted_candidates", "INTEGER DEFAULT 0")

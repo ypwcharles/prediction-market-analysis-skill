@@ -34,7 +34,12 @@ def test_schema_includes_runtime_reconciliation_columns(tmp_path):
         row["name"] for row in conn.execute("PRAGMA table_info(feedback)").fetchall()
     }
 
-    assert {"condition_id", "market_id", "token_id"} <= alert_columns
+    assert {
+        "condition_id",
+        "market_id",
+        "token_id",
+        "microstructure_diagnostics_json",
+    } <= alert_columns
     assert {"condition_id", "market_id", "token_id"} <= expression_columns
     assert {
         "callback_query_id",

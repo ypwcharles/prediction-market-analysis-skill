@@ -19,6 +19,18 @@ def _citation_brief(index: int, citation: Mapping[str, Any]) -> str:
     return f"{index}. {claim} [{source_name}]"
 
 
+def _as_mapping(value: Any) -> Mapping[str, Any]:
+    if isinstance(value, Mapping):
+        return value
+    return {}
+
+
+def _microstructure_line(diagnostics: Mapping[str, Any]) -> str:
+    if not diagnostics:
+        return ""
+    return " | ".join(f"{key}: {_as_text(value)}" for key, value in sorted(diagnostics.items()))
+
+
 def render_research_digest(payload: Mapping[str, Any]) -> str:
     citations = payload.get("citations", [])
     if not isinstance(citations, list):
@@ -38,6 +50,9 @@ def render_research_digest(payload: Mapping[str, Any]) -> str:
         f"summary: {_as_text(payload.get('summary'))}",
         f"watch: {_as_text(payload.get('watch_item'))}",
     ]
+    microstructure = _microstructure_line(_as_mapping(payload.get("microstructure_diagnostics")))
+    if microstructure:
+        lines.append(f"microstructure: {microstructure}")
     market_link = _as_text(payload.get("market_link"), default="")
     if market_link:
         lines.append(f"market: {market_link}")

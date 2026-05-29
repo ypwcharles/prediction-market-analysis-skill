@@ -94,6 +94,12 @@ def _render_execution_overlay(overlay: Mapping[str, Any]) -> str:
     )
 
 
+def _render_microstructure_diagnostics(diagnostics: Mapping[str, Any]) -> str:
+    if not diagnostics:
+        return "-"
+    return "\n".join(f"{key}: {_as_text(value)}" for key, value in sorted(diagnostics.items()))
+
+
 def render_strict_memo(payload: Mapping[str, Any]) -> str:
     mode = _as_text(payload.get("mode"), default="STRICT").upper()
     citations = payload.get("citations", [])
@@ -102,6 +108,7 @@ def render_strict_memo(payload: Mapping[str, Any]) -> str:
     claim_citations = [item for item in citations if isinstance(item, Mapping)]
     anchor_stack = _as_mapping(payload.get("anchor_stack"))
     execution_overlay = _as_mapping(payload.get("execution_overlay"))
+    microstructure_diagnostics = _as_mapping(payload.get("microstructure_diagnostics"))
 
     lines = [
         f"[{mode}]",
@@ -131,6 +138,17 @@ def render_strict_memo(payload: Mapping[str, Any]) -> str:
             _render_anchor_stack(anchor_stack),
             "execution overlay:",
             _render_execution_overlay(execution_overlay),
+        ]
+    )
+    if microstructure_diagnostics:
+        lines.extend(
+            [
+                "microstructure diagnostics:",
+                _render_microstructure_diagnostics(microstructure_diagnostics),
+            ]
+        )
+    lines.extend(
+        [
             "citations (claim-aware):",
             _render_claim_aware_citations(claim_citations),
         ]

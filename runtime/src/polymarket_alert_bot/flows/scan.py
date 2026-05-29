@@ -201,6 +201,12 @@ def execute_scan_flow(
                 "slippage_bps": seed.slippage_bps,
                 "max_entry_cents": parsed.max_entry_cents,
                 "suggested_size_usdc": parsed.suggested_size_usdc,
+                "microstructure_diagnostics_json": json.dumps(
+                    render_payload["microstructure_diagnostics"],
+                    sort_keys=True,
+                )
+                if render_payload["microstructure_diagnostics"]
+                else None,
                 "why_now": render_payload["why_now"],
                 "kill_criteria_text": render_payload["kill_criteria_text"],
                 "evidence_fresh_until": fresh_until,

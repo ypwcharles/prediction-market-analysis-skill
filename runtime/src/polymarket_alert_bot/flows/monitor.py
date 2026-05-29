@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Iterable
 from uuid import uuid4
@@ -7,6 +8,7 @@ from uuid import uuid4
 from polymarket_alert_bot.config.settings import RuntimeConfig, RuntimePaths, load_runtime_config
 from polymarket_alert_bot.config.source_registry import load_source_registry
 from polymarket_alert_bot.flows.shared import (
+    _build_microstructure_diagnostics,
     _deliver_message,
     _load_configured_evidence,
     _lookup_position_context,
@@ -121,6 +123,9 @@ def _deliver_monitor_action(
 ) -> str:
     monitor_alert_id = str(uuid4())
     primary_parsed = _pick_primary_parsed(parsed_results)
+    microstructure_diagnostics = _resolve_monitor_microstructure_diagnostics(
+        source_alert, primary_parsed
+    )
     message = render_monitor_alert(
         {
             "thesis": (
@@ -134,6 +139,7 @@ def _deliver_monitor_action(
             "suggested_action": _joined_suggested_actions(payloads),
             "triggers": payloads,
             "market_link": market_link,
+            "microstructure_diagnostics": microstructure_diagnostics,
         }
     )
     message_ref = _deliver_message(
@@ -174,6 +180,12 @@ def _deliver_monitor_action(
                 if primary_parsed and primary_parsed.suggested_size_usdc is not None
                 else source_alert["suggested_size_usdc"]
             ),
+            "microstructure_diagnostics_json": json.dumps(
+                microstructure_diagnostics,
+                sort_keys=True,
+            )
+            if microstructure_diagnostics
+            else None,
             "why_now": message,
             "kill_criteria_text": (
                 primary_parsed.kill_criteria_text
@@ -190,6 +202,23 @@ def _deliver_monitor_action(
         }
     )
     return monitor_alert_id
+
+
+def _resolve_monitor_microstructure_diagnostics(
+    source_alert, primary_parsed: ParsedJudgment | None
+) -> dict[str, Any]:
+    if primary_parsed is not None:
+        diagnostics = _build_microstructure_diagnostics(primary_parsed)
+        if diagnostics:
+            return diagnostics
+    raw = source_alert["microstructure_diagnostics_json"]
+    if not raw:
+        return {}
+    try:
+        loaded = json.loads(str(raw))
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _pick_primary_parsed(parsed_results: list[ParsedJudgment]) -> ParsedJudgment | None:
