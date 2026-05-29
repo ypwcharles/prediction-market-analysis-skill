@@ -44,6 +44,15 @@ RECOMMENDED_TOP_LEVEL_FIELDS: tuple[str, ...] = (
     "watch_item",
     "evidence_fresh_until",
     "recheck_required_at",
+    "price_state_bucket",
+    "transition_sample_count",
+    "markov_signal",
+    "microstructure_bias",
+    "maker_taker_tax_bps",
+    "execution_mode",
+    "adverse_selection_risk",
+    "model_validity",
+    "do_not_trade_reason",
 )
 
 

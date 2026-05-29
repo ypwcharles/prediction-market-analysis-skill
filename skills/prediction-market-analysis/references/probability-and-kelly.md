@@ -23,10 +23,13 @@ Common anchors:
 - historical base rate
 - domain-specific prior
 - related market-implied probability
+- validated price-dynamics signal, only as a secondary anchor and only after the model-validity gate passes
 
 Choose the anchor that is most defensible for this event type. Explain the choice.
 
 For resolution arbs, the anchor is usually not broad event probability. It is the current confidence that the written rules and oracle path will resolve in the expected direction.
+
+Do not use Markov, transition-matrix, or Monte Carlo output as the primary anchor unless the prompt is explicitly about model diagnostics and the model has enough sample depth, regime stability, and walk-forward support. Even then, treat it as a market-behavior anchor that still needs evidence and execution checks.
 
 ## Evidence Adjustments
 
@@ -148,6 +151,33 @@ Before accepting the final probability, compare it against:
 
 If the estimate creates obvious contradictions, either revise it or reject the setup.
 
+## Longshot and Price-Band Calibration
+
+Cheap contracts are not automatically cheap enough.
+
+Apply a longshot-bias adjustment when:
+
+- the side is low-price `Yes`
+- the trade depends on narrative optionality rather than primary evidence
+- the market is thin, noisy, or recently pumped by social attention
+- the claimed edge comes from price momentum rather than event evidence
+
+Use the adjustment to widen the interval, move the conservative boundary against the trade, or cap sizing. If the adjusted lower boundary no longer clears the executable price, return `NO TRADE`.
+
+Low-price `No` can benefit from the same bias pattern, but never approve it mechanically. Tail risk, settlement ambiguity, and inability to exit can still dominate.
+
+## Price-Dynamics Model Risk
+
+When Markov, transition-matrix, Monte Carlo, or price-history evidence influences the probability:
+
+- require `model_validity` to be explicit
+- record the current price bucket and relevant transition sample count
+- discount sparse rows, structural breaks, stale books, and nonstationary regimes
+- compare the signal against adjacent markets and non-price evidence
+- apply a separate model-risk haircut before Kelly
+
+If the price model conflicts with rule text, event evidence, or executable liquidity, the non-price failure controls the verdict.
+
 ## Net Edge Computation
 
 Never compute edge from midpoint fantasy prices when the user would have to cross the spread.
@@ -159,10 +189,19 @@ Compare:
 - fees
 - slippage
 - execution uncertainty
+- maker/taker execution tax
+- adverse-selection and stale-book risk
 - time-mismatch risk
 - rule / resolution risk for arbs
 
 If the net edge is marginal, reject.
+
+If the only viable entry is maker-only, compute two different answers:
+
+- actionable limit price if filled passively
+- `NO TRADE` condition if the user would need to cross the spread
+
+Do not let a maker-only theoretical edge become a taker recommendation.
 
 ## Asymmetric Time-Precision Haircuts
 
@@ -215,6 +254,9 @@ Apply at least:
 - drawdown haircut
 - time-precision haircut for narrow windows
 - concentration haircut for same-thesis ladders
+- longshot-bias haircut for low-price lottery-like sides
+- price-model haircut when Markov, Monte Carlo, or transition-matrix diagnostics affect the case
+- execution-mode haircut for maker-only, stale-book, or adverse-selection risk
 
 The final recommendation should usually be much smaller than raw Kelly.
 

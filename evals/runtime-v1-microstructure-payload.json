@@ -1,0 +1,101 @@
+{
+  "contract_version": "runtime.v1",
+  "context": {
+    "candidate_facts": {
+      "market_id": "pm_microstructure_longshot_yes",
+      "market_slug": "thin-longshot-example",
+      "market_question": "Will a low-probability event happen by Friday?",
+      "market_url": "https://polymarket.com/event/thin-longshot-example",
+      "platform": "Polymarket",
+      "trade_archetype_hint": "directional event",
+      "side": "YES",
+      "outcome_name": "Yes"
+    },
+    "rules_text": "This market resolves Yes only if the exact event is confirmed by the listed resolution source before Friday.",
+    "executable_fields": {
+      "best_bid_cents": 3.0,
+      "best_ask_cents": 6.0,
+      "mid_cents": 4.5,
+      "max_entry_cents": 4.0,
+      "suggested_bankroll_usdc": 10000.0,
+      "spread_bps": 3000,
+      "slippage_bps": 900,
+      "maker_taker_tax_bps": 3900
+    },
+    "microstructure": {
+      "price_state_bucket": "0-10c",
+      "transition_sample_count": 7,
+      "markov_signal": "model_invalid",
+      "microstructure_bias": "longshot_yes_haircut",
+      "execution_mode": "watch_only",
+      "adverse_selection_risk": "high",
+      "model_validity": "sparse_transition_rows"
+    },
+    "evidence": [
+      {
+        "source_id": "social-rumor-1",
+        "source_kind": "social",
+        "fetched_at": "2026-05-29T08:00:00Z",
+        "url": "https://x.com/example/status/1",
+        "claim_snippet": "A viral rumor says the event could happen soon, but no primary source confirms it.",
+        "tier": "tertiary",
+        "conflict_status": "unsupported"
+      }
+    ],
+    "source_tier_state": {
+      "strict_allowed": false,
+      "strict_block_reason": "no_primary_support",
+      "primary_support_count": 0,
+      "supplementary_count": 0,
+      "unknown_count": 1,
+      "unresolved_primary_conflict": false
+    },
+    "prior_cluster_state": {},
+    "position_context": {
+      "bankroll_usdc": 10000.0,
+      "open_positions": []
+    }
+  },
+  "response_schema": {
+    "required": [
+      "alert_kind",
+      "cluster_action",
+      "ttl_hours",
+      "citations",
+      "triggers",
+      "archive_payload"
+    ],
+    "recommended": [
+      "thesis",
+      "side",
+      "theoretical_edge_cents",
+      "executable_edge_cents",
+      "max_entry_cents",
+      "suggested_size_usdc",
+      "why_now",
+      "kill_criteria_text",
+      "summary",
+      "watch_item",
+      "evidence_fresh_until",
+      "recheck_required_at",
+      "price_state_bucket",
+      "transition_sample_count",
+      "markov_signal",
+      "microstructure_bias",
+      "maker_taker_tax_bps",
+      "execution_mode",
+      "adverse_selection_risk",
+      "model_validity",
+      "do_not_trade_reason"
+    ],
+    "alert_kind_enum": [
+      "strict",
+      "strict_degraded",
+      "research",
+      "reprice",
+      "monitor",
+      "heartbeat",
+      "degraded"
+    ]
+  }
+}

@@ -28,6 +28,7 @@ def test_eval_runtime_payloads_match_canonical_runtime_schema() -> None:
     fixture_paths = (
         REPO_ROOT / "evals" / "runtime-v1-scan-payload.json",
         REPO_ROOT / "evals" / "runtime-v1-monitor-payload.json",
+        REPO_ROOT / "evals" / "runtime-v1-microstructure-payload.json",
     )
 
     for fixture_path in fixture_paths:
@@ -62,3 +63,34 @@ def test_skill_doc_marks_runtime_contract_reference_as_canonical() -> None:
 
     assert "references/runtime-judgment-contract.md" in skill_doc
     assert "Do not treat this skill file as a second schema definition." in skill_doc
+
+
+def test_skill_doc_links_microstructure_reference() -> None:
+    skill_doc = (REPO_ROOT / "skills" / "prediction-market-analysis" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    microstructure_doc = (
+        REPO_ROOT
+        / "skills"
+        / "prediction-market-analysis"
+        / "references"
+        / "microstructure-models.md"
+    ).read_text(encoding="utf-8")
+
+    assert "references/microstructure-models.md" in skill_doc
+    assert "Price history is evidence, not verdict" in skill_doc
+    assert "Markov / Transition-Matrix Gate" in microstructure_doc
+    assert "maker_taker_tax_bps" in microstructure_doc
+
+
+def test_eval_suite_covers_microstructure_failure_modes() -> None:
+    eval_doc = json.loads((REPO_ROOT / "evals" / "evals.json").read_text(encoding="utf-8"))
+    prompts = "\n".join(str(case["prompt"]) for case in eval_doc["evals"])
+    referenced_files = {
+        file_path for case in eval_doc["evals"] for file_path in case.get("files", [])
+    }
+
+    assert "longshot bias" in prompts
+    assert "Markov transition matrix" in prompts
+    assert "taker fee" in prompts
+    assert "evals/runtime-v1-microstructure-payload.json" in referenced_files
