@@ -131,6 +131,57 @@
         "The output sets cluster_action to none for activation-incomplete fallback.",
         "The output does not include the interactive header '1. Verdict'."
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "Polymarket 有个 4c 的 Yes，历史价格从 2c 涨到 4c，很多人说这是 longshot bias 反过来的机会。我没有 primary source，只看到社媒讨论和一点成交量。请按 skill 模板判断是否能买，并明确 longshot-bias haircut、best expression、sizing。",
+      "expected_output": "The analysis treats cheap Yes as a longshot-bias risk rather than automatic upside, requires independent event evidence, applies a haircut, and returns NO TRADE or observation-only sizing if the edge rests on social momentum.",
+      "files": [],
+      "expectations": [
+        "The output explicitly mentions longshot bias or a low-price Yes haircut.",
+        "The output does not approve the trade solely because payoff is large.",
+        "The output requires independent evidence beyond social momentum or price movement.",
+        "The sizing section caps the trade at observation size or 0 Kelly unless executable edge survives."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "我用一个 Markov transition matrix 回测某个 Polymarket 市场，当前 bucket 是 20-30c，但这个 bucket 只有 8 次历史转移，模拟结果显示 Yes 终局概率 45%，当前 ask 30c。请用 skill 判断这是不是 15c edge。",
+      "expected_output": "The analysis refuses to treat sparse Markov output as a real 15c edge, marks the model invalid or insufficient-history, and requires rule/evidence/execution checks before any trade.",
+      "files": [],
+      "expectations": [
+        "The output reports or discusses transition sample count.",
+        "The output marks the Markov signal as invalid, sparse, or insufficient history.",
+        "The output does not treat the simulated 45% as the final fair probability.",
+        "The final verdict is NO TRADE or no-action until additional evidence/model validation exists."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "一个市场我估 fair 是 62c，best bid 52c、best ask 59c，深度很浅，taker fee 和 slippage 后实际成交要到 61c。maker 58c 可能排队，但新闻变化很快。请按模板判断是否交易。",
+      "expected_output": "The analysis computes executable edge by route, distinguishes maker-only from taker-safe, accounts for queue and adverse-selection risk, and rejects crossing the spread if taker execution destroys edge.",
+      "files": [],
+      "expectations": [
+        "The output distinguishes maker execution from taker execution.",
+        "The output says the taker route destroys or materially reduces edge.",
+        "The output discusses queue, stale-book, or adverse-selection risk.",
+        "The verdict or sizing reflects maker-only/watch-only discipline rather than treating midpoint edge as real."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Use only the runtime payload in `evals/runtime-v1-microstructure-payload.json`. Stay in Runtime Judgment Mode and return one JSON object only. Because the microstructure data says sparse transition rows and longshot Yes haircut, preserve those diagnostics in the JSON if relevant.",
+      "expected_output": "A runtime JSON object that remains non-strict, preserves microstructure diagnostics such as model_validity and do_not_trade_reason, and does not emit the interactive report.",
+      "files": [
+        "evals/runtime-v1-microstructure-payload.json"
+      ],
+      "expectations": [
+        "The output is a single JSON object, not markdown.",
+        "The output contains the required runtime.v1 top-level fields.",
+        "The output uses a non-strict alert_kind because strict_allowed is false.",
+        "The output includes at least one microstructure diagnostic field such as model_validity, microstructure_bias, execution_mode, adverse_selection_risk, or do_not_trade_reason.",
+        "The output does not include the interactive header '1. Verdict'."
+      ]
     }
   ]
 }

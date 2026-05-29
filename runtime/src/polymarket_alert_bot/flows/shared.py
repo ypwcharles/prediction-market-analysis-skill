@@ -18,6 +18,18 @@ from polymarket_alert_bot.sources.news_client import NewsClient
 from polymarket_alert_bot.sources.x_client import XClient
 from polymarket_alert_bot.storage.repositories import RuntimeRepository
 
+MICROSTRUCTURE_DIAGNOSTIC_FIELDS: tuple[str, ...] = (
+    "price_state_bucket",
+    "transition_sample_count",
+    "markov_signal",
+    "microstructure_bias",
+    "maker_taker_tax_bps",
+    "execution_mode",
+    "adverse_selection_risk",
+    "model_validity",
+    "do_not_trade_reason",
+)
+
 
 @dataclass(frozen=True)
 class EvidenceLoadResult:
@@ -128,6 +140,10 @@ def _build_render_payload(
     )
     anchor_stack = _build_anchor_stack(seed, parsed)
     execution_overlay = _build_execution_overlay(seed)
+    microstructure_diagnostics = _build_microstructure_diagnostics(parsed)
+    archive_payload = dict(parsed.archive_payload)
+    if microstructure_diagnostics:
+        archive_payload["microstructure_diagnostics"] = microstructure_diagnostics
     return {
         "mode": "STRICT-DEGRADED"
         if final_kind == "strict_degraded"
@@ -153,11 +169,24 @@ def _build_render_payload(
         or "Monitor evidence freshness.",
         "citations": [citation.model_dump(exclude_none=True) for citation in parsed.citations],
         "triggers": [trigger.model_dump(exclude_none=True) for trigger in parsed.triggers],
-        "archive_payload": parsed.archive_payload,
+        "archive_payload": archive_payload,
         "scan_sleeves": list(seed.scan_sleeves),
         "anchor_stack": anchor_stack,
         "execution_overlay": execution_overlay,
+        "microstructure_diagnostics": microstructure_diagnostics,
     }
+
+
+def _build_microstructure_diagnostics(parsed: ParsedJudgment) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {}
+    for field in MICROSTRUCTURE_DIAGNOSTIC_FIELDS:
+        value = getattr(parsed, field)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        diagnostics[field] = value
+    return diagnostics
 
 
 def _build_anchor_stack(seed: AlertSeed, parsed: ParsedJudgment) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 ---
 name: prediction-market-analysis
-description: Use when analyzing Polymarket, Kalshi, or related prediction-market contracts for tradeability, edge, expression selection, smart-money signals, account-style reviews, held-position management, timing buckets, or Kelly sizing. Trigger on market URLs, theme scans, adjacent-bucket comparisons, copy-trade questions, historical win-rate/payoff reviews, or bankroll-aware sizing.
+description: Use when analyzing Polymarket, Kalshi, or related prediction-market contracts for tradeability, edge, expression selection, smart-money signals, account-style reviews, held-position management, timing buckets, microstructure diagnostics, price-path/Markov signals, maker/taker execution quality, or Kelly sizing. Trigger on market URLs, theme scans, adjacent-bucket comparisons, copy-trade questions, historical win-rate/payoff reviews, bankroll-aware sizing, longshot-bias questions, or any request to judge whether a quoted prediction-market edge is executable.
 ---
 
 # Prediction Market Analysis
@@ -35,6 +35,7 @@ Use this skill when the user wants to:
 - re-evaluate a proposed trade in the context of existing exposure
 - analyze a wallet, account, or personal trading history for style, win rate, payoff ratio, or strategy fit
 - judge whether a smart-money, insider, whale, or alert-bot signal is worth following
+- judge whether Markov, price-history, longshot-bias, maker/taker, or order-book microstructure evidence makes an edge real or fragile
 
 Do not use this skill for:
 
@@ -51,6 +52,8 @@ Do not use this skill for:
 5. Conservative Kelly only. Size from the conservative boundary, never the central estimate.
 6. Portfolio-aware by default. A good isolated trade can still be a bad portfolio trade.
 7. Strategy-fit matters. A trade outside the user's proven edge lanes needs a stronger evidence bar and a smaller size.
+8. Price history is evidence, not verdict. Markov or price-path models can diagnose market behavior, but they cannot replace rule text, event evidence, expression fit, or live executable depth.
+9. Executable edge beats theoretical edge. Prefer maker entry only when fill probability and adverse-selection risk are acceptable; reject setups whose edge exists only at midpoint, last trade, or taker-before-fee fantasy prices.
 
 ## Operating Modes
 
@@ -132,6 +135,12 @@ For Polymarket account review, aggregate by `conditionId` or market slug before 
 
 If the user has a high-win-rate / low-payoff profile, do not reflexively recommend buying longer-shot contracts to "improve odds." Prefer preserving the hit-rate edge while reducing average loss through smaller hazardous positions, earlier thesis stop-losses, and better entry discipline.
 
+### Price-Dynamics / Microstructure Diagnostic
+
+Use as a supporting lens, not as a primary trade archetype, when the prompt mentions price paths, Markov chains, transition matrices, longshot bias, maker/taker behavior, execution quality, scanner ranking, or suspicious quoted edge.
+
+This lens can support another archetype, cap sizing, or force `NO TRADE`. It cannot by itself justify a conviction trade.
+
 ## Trade Archetypes
 
 Classify the setup before doing directional work. Every trade must start in exactly one primary bucket:
@@ -199,6 +208,18 @@ Prioritize:
 
 A smart-money signal can justify a watchlist or observation position by itself. It cannot justify a conviction position unless independent evidence and rule-fit also support the trade.
 
+### Supporting Lens: Price-Dynamics / Microstructure Signal
+
+Apply this lens after choosing the primary archetype when price history or execution quality is part of the thesis.
+
+Prioritize:
+
+- whether the exact market expression has enough price history for a state-transition model
+- whether price-path behavior survived a walk-forward or out-of-sample sanity check
+- whether cheap `Yes` or cheap `No` pricing needs a longshot-bias adjustment
+- whether maker/taker fees, spread, queue risk, and adverse selection erase the edge
+- whether the signal is a reason to investigate, reduce size, or reject rather than a reason to trade
+
 ## Workflow
 
 ### 1. Normalize the input
@@ -241,6 +262,7 @@ For Polymarket, use the API-first data path before relying on the website UI:
 - Report coverage for scans: pages fetched, raw markets/events reviewed, tradable markets, and strict survivors. If coverage is partial, say exactly where it stopped.
 - Account or wallet review: use Data API positions and activity to recover exposure, average entry, realized / unrealized PnL, and related positions before giving sizing advice.
 - Monitoring or held-position review: use CLOB WebSocket market-channel events or a fresh CLOB book timestamp for orderbook, price change, trade, best bid/ask, resolved, and new-market events; do not trust stale page quotes.
+- Price-dynamics or microstructure prompt: retrieve enough historical price, volume, spread, and book snapshots to test whether the exact contract has usable state-transition evidence; if not, mark the model invalid instead of improvising.
 
 For a single market, enrich the analysis with:
 
@@ -264,6 +286,8 @@ Before directional analysis, check:
 - resolution-source reliability
 - liquidity and book quality
 - fees and likely slippage
+- spread, queue depth, and maker/taker asymmetry
+- stale-book or adverse-selection risk
 - risk of noise, manipulation, or wash trading
 
 If the market is not clean enough to analyze, return `NO TRADE`.
@@ -328,6 +352,26 @@ For resolution arbs, interpret these as resolution confidence rather than broad 
 
 Do not treat market price as literal truth.
 
+### 8A. Run price-dynamics and microstructure diagnostics when relevant
+
+Use this step when the prompt, data, scanner context, or market behavior raises a price-history or execution-quality question.
+
+Read `references/microstructure-models.md` when using:
+
+- Markov chains or transition matrices
+- Monte Carlo simulations from price states
+- longshot-bias or price-band calibration
+- maker/taker execution analysis
+- scanner ranking based on spread, depth, volume, or price movement
+
+Required posture:
+
+- Treat price-history output as a diagnostic signal, not as a direct probability verdict.
+- Report transition sample counts and model-validity status when using Markov-style evidence.
+- Mark the model invalid when state rows are sparse, the market had a structural break, the book is stale, or the exact expression lacks enough history.
+- Apply longshot and model-risk haircuts before Kelly.
+- Reject the trade if the only edge comes from a sparse transition matrix, a midpoint quote, a stale book, or a low-price `Yes` lottery pattern with no independent evidence.
+
 ### 9. Compute executable edge
 
 Compare the conservative fair value implied by the interval against the best realistic executable price after:
@@ -337,9 +381,14 @@ Compare the conservative fair value implied by the interval against the best rea
 - full-book slippage for the intended order size, not just best bid / best ask or half-spread approximation
 - tick size, minimum order size, and whether the market is accepting orders
 - execution uncertainty
+- maker queue risk
+- taker fee and spread tax
+- stale-quote and adverse-selection risk
 - timing-mismatch risk
 
 For Polymarket, executable price means: simulate the intended fill through full CLOB depth, apply taker fee when crossing the book, respect tick/min-size constraints, then compare net entry against conservative fair value. If the edge only exists at midpoint or displayed last price, return `NO TRADE`.
+
+If the recommendation is maker-only, say so explicitly and include the maximum entry price, fill-risk caveat, and the condition under which the trade becomes invalid rather than crossing the spread.
 
 If edge disappears after costs and timing risk, return `NO TRADE`.
 
@@ -379,6 +428,8 @@ Use:
 - liquidity haircut
 - drawdown haircut
 - time-precision haircut
+- longshot-bias haircut when low-price contracts or known price-band bias affects the side
+- price-model haircut when Markov, Monte Carlo, or other price-history diagnostics influence the case
 
 If the best expression is a ladder or split structure rather than a single contract, recommend that instead of forcing a one-line answer.
 
@@ -443,12 +494,14 @@ Before writing any substantive content, first emit the exact eight section heade
 - settlement time
 - executable price(s)
 - liquidity / fee notes
+- price-dynamics / microstructure notes
 
 ### 3. Probability Assessment
 - anchor probability
 - adjusted main probability
 - confidence interval
 - direction vs timing decomposition
+- longshot or price-model calibration applied
 - main uncertainty drivers
 
 ### 4. Evidence Review
@@ -468,6 +521,8 @@ Before writing any substantive content, first emit the exact eight section heade
 - worse expression(s)
 - if thesis is right but late
 - net edge after costs
+- maker/taker execution tax
+- model-validity constraints
 - why edge is or is not sufficient
 
 ### 6. Portfolio Impact
@@ -582,6 +637,9 @@ Return `NO TRADE` if any of the following is true:
 9. Material rule-scope differences exist but have not been analyzed.
 10. A smart-money signal cannot be validated beyond "a wallet bought this" and no independent edge remains.
 11. The setup falls in a user-specific hazard lane and the requested size is larger than observation size.
+12. Markov, transition-matrix, or price-path evidence is sparse, stale, structurally broken, or not tied to the exact contract expression.
+13. A low-price longshot side has no independent evidence after longshot-bias and model-risk haircuts.
+14. The trade is maker-only but adverse-selection, stale-book, or fill-risk conditions make passive entry unreliable.
 
 ## Common Mistakes
 
@@ -598,10 +656,14 @@ Return `NO TRADE` if any of the following is true:
 - Trying to raise payoff ratio by chasing long shots instead of reducing average loss and improving expression selection.
 - Letting a smart-money observation trade become a conviction trade without independent evidence.
 - Treating geopolitical short-window `Yes` contracts as core trades when the evidence only supports general tension or eventual risk.
+- Treating a Markov simulation or transition matrix as the final probability instead of a market-behavior diagnostic.
+- Ignoring longshot bias when buying cheap `Yes` contracts because the payoff looks attractive.
+- Calling an edge real when it disappears after maker/taker fees, queue risk, stale-book risk, or full-depth slippage.
 
 ## References
 
 - Read `references/evidence-engine.md` when grading sources, separating timing from direction, or evaluating a resolution arb.
 - Read `references/probability-and-kelly.md` before generating intervals, choosing the best expression, pricing edge, or sizing a trade.
+- Read `references/microstructure-models.md` when the prompt involves Markov chains, transition matrices, longshot bias, price-path models, maker/taker execution, adverse selection, scanner ranking, or price-history diagnostics.
 - Read `references/domain-adapters.md` when the market falls into politics/macro, crypto, or sports.
 - Read `references/research-and-open-source.md` when you need the research foundation or design rationale behind this skill.

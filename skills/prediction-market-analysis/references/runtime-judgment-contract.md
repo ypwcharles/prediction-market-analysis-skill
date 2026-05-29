@@ -57,6 +57,15 @@ Do not emit markdown headings, prose preambles, or fenced code blocks in runtime
 - `watch_item`
 - `evidence_fresh_until`
 - `recheck_required_at`
+- `price_state_bucket`
+- `transition_sample_count`
+- `markov_signal`
+- `microstructure_bias`
+- `maker_taker_tax_bps`
+- `execution_mode`
+- `adverse_selection_risk`
+- `model_validity`
+- `do_not_trade_reason`
 
 ## 4) Allowed Enum Values
 
@@ -119,6 +128,24 @@ Default `cluster_action`: `none`; use `hold` only when an active cluster is expl
 ### `degraded`
 Use when runtime constraints prevent reliable judgment (for example major source outages or rule ambiguity that blocks conclusion).
 Default `cluster_action`: `hold` for active clusters and `none` otherwise.
+
+## 5A) Microstructure and Price-Dynamics Fields
+
+Use these optional fields when a judgment depends on price-history, Markov-style diagnostics, longshot-bias calibration, or maker/taker execution quality.
+
+- `price_state_bucket`: current discretized price band, such as `20-30c`.
+- `transition_sample_count`: observed transition count for the relevant current-state row or diagnostic sample.
+- `markov_signal`: concise signal label such as `weak_yes_drift`, `no_signal`, or `model_invalid`.
+- `microstructure_bias`: applied calibration label such as `longshot_yes_haircut`, `thin_book`, or `none`.
+- `maker_taker_tax_bps`: estimated execution tax from spread, fees, and slippage when available.
+- `execution_mode`: `maker_only`, `taker_safe`, `watch_only`, or another concise execution route label.
+- `adverse_selection_risk`: qualitative risk label, usually `low`, `medium`, or `high`.
+- `model_validity`: concise status such as `valid`, `insufficient_history`, `sparse_transition_rows`, `structural_break`, or `stale_book`.
+- `do_not_trade_reason`: required when these diagnostics are the main reason a trade is rejected or capped to watch-only.
+
+For numeric microstructure fields, use a JSON number when measured and JSON `null` when unavailable. Do not emit string placeholders such as `unknown` for `transition_sample_count` or `maker_taker_tax_bps`; put uncertainty in `model_validity`, `markov_signal`, or `do_not_trade_reason`.
+
+Do not use these fields to replace required top-level fields. They are explanatory diagnostics that preserve why a theoretical edge is or is not executable.
 
 ## 6) Citation Rules
 Each citation must support at least one concrete claim used by the judgment.

@@ -104,6 +104,12 @@ def _format_trigger(trigger: Mapping[str, Any]) -> str:
     return "".join(parts)
 
 
+def _microstructure_line(diagnostics: Mapping[str, Any]) -> str:
+    if not diagnostics:
+        return ""
+    return "｜".join(f"{key}={_as_text(value)}" for key, value in sorted(diagnostics.items()))
+
+
 def render_monitor_alert(payload: Mapping[str, Any]) -> str:
     triggers = _normalize_triggers(payload)
     summary = _pick_preferred_text(
@@ -114,12 +120,15 @@ def render_monitor_alert(payload: Mapping[str, Any]) -> str:
     why_now = _pick_preferred_text(payload.get("why_now"), payload.get("summary"), default="")
     watch_item = _pick_preferred_text(payload.get("watch_item"), default="")
     suggested_action = _pick_preferred_text(payload.get("suggested_action"), default="")
+    microstructure = _microstructure_line(_as_mapping(payload.get("microstructure_diagnostics")))
 
     lines = ["[监控]", f"结论：{summary}"]
     if why_now and why_now != summary:
         lines.append(f"原因：{why_now}")
     if suggested_action:
         lines.append(f"建议动作：{suggested_action}")
+    if microstructure:
+        lines.append(f"微结构：{microstructure}")
     if triggers:
         lines.append("触发项：")
         lines.extend(_format_trigger(trigger) for trigger in triggers)

@@ -348,6 +348,15 @@ def test_parse_judgment_result_preserves_runtime_alert_fields() -> None:
         "watch_item": "Need second primary confirmation",
         "evidence_fresh_until": "2026-04-18T12:00:00Z",
         "recheck_required_at": "2026-04-18T06:00:00Z",
+        "price_state_bucket": "30-40c",
+        "transition_sample_count": 42,
+        "markov_signal": "weak_no_drift",
+        "microstructure_bias": "longshot_yes_haircut",
+        "maker_taker_tax_bps": 125.0,
+        "execution_mode": "maker_only",
+        "adverse_selection_risk": "medium",
+        "model_validity": "valid",
+        "do_not_trade_reason": "",
         "citations": [],
         "triggers": [],
         "archive_payload": {},
@@ -367,6 +376,35 @@ def test_parse_judgment_result_preserves_runtime_alert_fields() -> None:
     assert parsed.watch_item == payload["watch_item"]
     assert parsed.evidence_fresh_until == payload["evidence_fresh_until"]
     assert parsed.recheck_required_at == payload["recheck_required_at"]
+    assert parsed.price_state_bucket == payload["price_state_bucket"]
+    assert parsed.transition_sample_count == payload["transition_sample_count"]
+    assert parsed.markov_signal == payload["markov_signal"]
+    assert parsed.microstructure_bias == payload["microstructure_bias"]
+    assert parsed.maker_taker_tax_bps == payload["maker_taker_tax_bps"]
+    assert parsed.execution_mode == payload["execution_mode"]
+    assert parsed.adverse_selection_risk == payload["adverse_selection_risk"]
+    assert parsed.model_validity == payload["model_validity"]
+    assert parsed.do_not_trade_reason == payload["do_not_trade_reason"]
+
+
+def test_parse_judgment_result_normalizes_unavailable_numeric_microstructure_fields() -> None:
+    payload = {
+        "alert_kind": "research",
+        "cluster_action": "none",
+        "ttl_hours": 1,
+        "transition_sample_count": "unknown",
+        "maker_taker_tax_bps": "not provided",
+        "model_validity": "insufficient_history",
+        "citations": [],
+        "triggers": [],
+        "archive_payload": {},
+    }
+
+    parsed = parse_judgment_result(payload)
+
+    assert parsed.transition_sample_count is None
+    assert parsed.maker_taker_tax_bps is None
+    assert parsed.model_validity == "insufficient_history"
 
 
 def test_enricher_blocks_strict_when_only_x_sources_present() -> None:
