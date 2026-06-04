@@ -74,6 +74,21 @@ For low-price `No`:
 
 Longshot calibration should adjust the probability interval or sizing haircut. It should not become a standalone reason to trade.
 
+## Disputed Low-Price Repricing Diagnostics
+
+For disputed-resolution optionality, the microstructure question is not only terminal probability. It is whether the market can reprice before final adjudication and whether the user can exit into that repricing.
+
+Check:
+
+- current price band, especially 0.1c-2c extreme lows
+- bid/ask spread as a percentage of entry price
+- book depth at intended entry and expected exit levels
+- recent volume around dispute updates, UMA votes, platform comments, or evidence drops
+- whether the market still attracts attention before final resolution
+- whether the intended exit can be placed as maker orders without relying on a perfect top tick
+
+Reject if the only available entry is a wide-spread taker fill and the only plausible exit is another trader making the same mistake. Cap the signal as exploratory if the book has no meaningful bids, no recent dispute-related volume, or no near-term catalyst.
+
 ## Maker / Taker Execution
 
 Compute edge from the executable route:

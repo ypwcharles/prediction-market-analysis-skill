@@ -166,6 +166,24 @@ Use the adjustment to widen the interval, move the conservative boundary against
 
 Low-price `No` can benefit from the same bias pattern, but never approve it mechanically. Tail risk, settlement ambiguity, and inability to exit can still dominate.
 
+## Disputed Resolution Optionality Sizing
+
+When a disputed or UMA-sensitive market collapses into an extreme low-price band, separate two probabilities:
+
+- `P(final payout)`: probability the side ultimately wins settlement.
+- `P(pre-final repricing)`: probability the side trades up before final UMA/oracle/platform closure.
+
+A trade can be approved for `P(pre-final repricing)` even when `P(final payout)` is not high enough for resolution-arb sizing, but only if it is labeled as optionality and given a pre-final exit plan. Do not use final-payout Kelly for this structure. Use fixed-loss sizing first.
+
+Default caps:
+
+- ordinary optionality entry: 0.5%-3% of bankroll at risk
+- unusually clean catalyst and liquidity: 3%-5%
+- above 5%: requires a separate reason and should normally be rejected
+- 20%+ while settlement ambiguity remains material: always invalid
+
+For this structure, edge is evaluated against executable entry, likely exit liquidity, and catalyst timing. It is not enough that the contract can theoretically pay 100x.
+
 ## Price-Dynamics Model Risk
 
 When Markov, transition-matrix, Monte Carlo, or price-history evidence influences the probability:
@@ -243,6 +261,8 @@ For resolution arbs, Kelly is usually secondary to operational risk. Start with 
 - long capital lock-up
 - inability to hedge or exit
 
+For disputed-resolution optionality, Kelly is usually the wrong primary sizing tool. Treat the premium as a fixed-loss option and size from the amount the user can write to zero while preserving cash for later opportunities.
+
 ## Required Haircuts
 
 Apply at least:
@@ -257,6 +277,7 @@ Apply at least:
 - longshot-bias haircut for low-price lottery-like sides
 - price-model haircut when Markov, Monte Carlo, or transition-matrix diagnostics affect the case
 - execution-mode haircut for maker-only, stale-book, or adverse-selection risk
+- governance/oracle-process haircut for disputed-resolution optionality
 
 The final recommendation should usually be much smaller than raw Kelly.
 

@@ -1,6 +1,6 @@
 ---
 name: prediction-market-analysis
-description: Use when analyzing Polymarket, Kalshi, or related prediction-market contracts for tradeability, edge, expression selection, smart-money signals, account-style reviews, held-position management, timing buckets, microstructure diagnostics, price-path/Markov signals, maker/taker execution quality, or Kelly sizing. Trigger on market URLs, theme scans, adjacent-bucket comparisons, copy-trade questions, historical win-rate/payoff reviews, bankroll-aware sizing, longshot-bias questions, or any request to judge whether a quoted prediction-market edge is executable.
+description: Use when analyzing Polymarket, Kalshi, or related prediction-market contracts for tradeability, edge, expression selection, disputed-resolution optionality, smart-money signals, account-style reviews, held-position management, timing buckets, microstructure diagnostics, price-path/Markov signals, maker/taker execution quality, or Kelly sizing. Trigger on market URLs, theme scans, adjacent-bucket comparisons, copy-trade questions, historical win-rate/payoff reviews, bankroll-aware sizing, low-price UMA/dispute opportunities, longshot-bias questions, or any request to judge whether a quoted prediction-market edge is executable.
 ---
 
 # Prediction Market Analysis
@@ -36,6 +36,7 @@ Use this skill when the user wants to:
 - analyze a wallet, account, or personal trading history for style, win rate, payoff ratio, or strategy fit
 - judge whether a smart-money, insider, whale, or alert-bot signal is worth following
 - judge whether Markov, price-history, longshot-bias, maker/taker, or order-book microstructure evidence makes an edge real or fragile
+- judge whether a disputed or UMA-sensitive market has low-price optionality worth buying for a pre-final repricing exit
 
 Do not use this skill for:
 
@@ -54,6 +55,7 @@ Do not use this skill for:
 7. Strategy-fit matters. A trade outside the user's proven edge lanes needs a stronger evidence bar and a smaller size.
 8. Price history is evidence, not verdict. Markov or price-path models can diagnose market behavior, but they cannot replace rule text, event evidence, expression fit, or live executable depth.
 9. Executable edge beats theoretical edge. Prefer maker entry only when fill probability and adverse-selection risk are acceptable; reject setups whose edge exists only at midpoint, last trade, or taker-before-fee fantasy prices.
+10. Truth does not pay directly. Prediction-market payout comes from rule interpretation, oracle/platform process, and final settlement mechanics; disputed markets can be opportunities, but they must be separated into high-price resolution confidence vs low-price optionality.
 
 ## Operating Modes
 
@@ -141,6 +143,12 @@ Use as a supporting lens, not as a primary trade archetype, when the prompt ment
 
 This lens can support another archetype, cap sizing, or force `NO TRADE`. It cannot by itself justify a conviction trade.
 
+### Disputed Resolution Optionality Review
+
+Use when a disputed, UMA-sensitive, or platform-interpretation-sensitive market has collapsed to an extreme low price and the user is considering buying small optionality for a rebound before final adjudication.
+
+Read `references/disputed-resolution-optionality.md` before approving. The key question is not only "will this resolve correctly?" but also "can this near-zero side reprice before final UMA/oracle closure, and can the user exit into that repricing?"
+
 ## Trade Archetypes
 
 Classify the setup before doing directional work. Every trade must start in exactly one primary bucket:
@@ -157,7 +165,19 @@ Prioritize:
 - capital lock-up
 - operational tail risk
 
-### 2. Directional Event
+### 2. Disputed Resolution Optionality
+
+The market is disputed, UMA-sensitive, or exposed to platform/oracle interpretation, and the proposed edge comes from buying an extreme low-price side for pre-final repricing rather than from holding to final payout.
+
+Prioritize:
+
+- whether the side still has a specific non-zero rule/oracle/reversal path
+- current low-price band, spread, depth, and exit liquidity
+- pre-final catalyst window before UMA/oracle closure
+- explicit profit-taking plan before final ruling
+- fixed-loss sizing from reserved cash, not averaging down a failed high-price conviction trade
+
+### 3. Directional Event
 
 The main question is whether an event happens at all, and timing is secondary.
 
@@ -168,7 +188,7 @@ Prioritize:
 - asymmetric evidence
 - best broad expression of the thesis
 
-### 3. Time-Bucket Trade
+### 4. Time-Bucket Trade
 
 The main risk is not only whether the event happens, but whether it happens inside a specific window.
 
@@ -179,7 +199,7 @@ Prioritize:
 - operational constraints
 - catalysts that narrow timing, not just direction
 
-### 4. Cross-Bucket Structure
+### 5. Cross-Bucket Structure
 
 The edge comes from comparing nearby contracts that express the same thesis with different clocks, strikes, thresholds, or rule scopes.
 
@@ -193,7 +213,7 @@ Prioritize:
 
 If contracts differ in named actors, settlement verbs, or event scope, default to this archetype unless the rule text is otherwise identical apart from the deadline.
 
-### 5. Smart-Money Signal
+### 6. Smart-Money Signal
 
 The edge comes from another wallet, PolyBeats-style alert, insider signal, large trade, whale position, or copy-trade cue.
 
@@ -241,12 +261,14 @@ Extract or infer:
 Decide whether the setup is:
 
 - `resolution arb`
+- `disputed resolution optionality`
 - `directional event`
 - `time-bucket trade`
 - `cross-bucket structure`
 - `smart-money signal`
 
 Do not analyze a resolution arb like a normal prediction trade.
+Do not analyze a disputed-resolution optionality trade like a normal resolution arb; the expected monetization is usually pre-final repricing, not final settlement.
 Do not analyze a time-bucket trade as if direction alone were sufficient.
 If nearby contracts differ in named actors, settlement verbs, or event scope, treat that as a rule-scope problem before treating it as a pure timing problem.
 If both deadline and rule scope differ, classify as `cross-bucket structure`, not `time-bucket trade`.
@@ -322,6 +344,7 @@ Before assigning a probability, split the thesis into:
 - probability the event happens at all
 - probability it happens within this contract window
 - probability the market resolves cleanly under the written rules
+- for disputed-resolution optionality, probability the side reprices before final settlement vs probability it actually wins final settlement
 
 If the user's thesis is mostly "this probably happens eventually" but the contract requires a narrow deadline, treat that as a contract-selection warning, not as full support for the asked market.
 
@@ -572,6 +595,25 @@ Approve only if:
 
 Reject if the trade is merely "probably going to resolve that way soon" without enough rule-level certainty.
 
+### Disputed Resolution Optionality
+
+Approve only as a small fixed-loss optionality trade if:
+
+- the market is already disputed, UMA-sensitive, or exposed to a live platform/oracle interpretation question
+- the side trades in an extreme low band, typically around 0.1c-2c, where a small repricing can create multi-x upside
+- there is a concrete non-zero path: ambiguous rule wording, unresolved dispute process, credible evidence conflict, official-source ambiguity, or plausible voter/platform reversal
+- there is enough executable depth to enter and enough expected attention/liquidity to exit before final adjudication
+- the recommendation names profit-taking levels, final exit timing, and max fixed loss
+
+Reject or cap at tiny lottery size if:
+
+- the only reason is "it used to trade much higher" or "the payout is huge if it somehow wins"
+- UMA/oracle/platform process has already closed the non-zero path
+- the trade is really an attempt to average down a high-cost failed resolution arb
+- the user intends to hold through final settlement without separately proving resolution confidence
+
+Default sizing is 0.5%-3% of bankroll at risk, rarely 3%-5% when liquidity is excellent and the catalyst is near. Never let this setup justify a 20%+ position while settlement ambiguity remains material.
+
 ### Directional Event
 
 Approve only if:
@@ -629,7 +671,7 @@ Return `NO TRADE` if any of the following is true:
 1. No informational edge survives scrutiny.
 2. Evidence conflict is too high to support a disciplined interval.
 3. Net edge vanishes after fees, slippage, or execution assumptions.
-4. Settlement ambiguity is material.
+4. Settlement ambiguity is material and the setup is being treated as resolution arb rather than explicitly capped disputed-resolution optionality.
 5. Liquidity is too weak to trust the paper edge.
 6. Portfolio concentration is too high.
 7. The thesis may be right, but the asked contract is the wrong expression.
@@ -649,6 +691,8 @@ Return `NO TRADE` if any of the following is true:
 - Treating contracts with different named actors or settlement verbs as if they were only different time buckets.
 - Paying for timing precision the evidence does not justify.
 - Evaluating a resolution arb like a normal prediction trade.
+- Treating factual truth as if it directly pays, while ignoring UMA, oracle, platform interpretation, or dispute mechanics.
+- Letting a high-price disputed-resolution arb failure mutate into emotional averaging-down instead of a separately sized low-price optionality trade.
 - Using the central estimate for Kelly sizing.
 - Ignoring existing correlated exposure across the same narrative cluster.
 - Calling theoretical edge a real edge when execution destroys it.
@@ -665,5 +709,6 @@ Return `NO TRADE` if any of the following is true:
 - Read `references/evidence-engine.md` when grading sources, separating timing from direction, or evaluating a resolution arb.
 - Read `references/probability-and-kelly.md` before generating intervals, choosing the best expression, pricing edge, or sizing a trade.
 - Read `references/microstructure-models.md` when the prompt involves Markov chains, transition matrices, longshot bias, price-path models, maker/taker execution, adverse selection, scanner ranking, or price-history diagnostics.
+- Read `references/disputed-resolution-optionality.md` when the prompt involves UMA disputes, platform/oracle interpretation risk, near-zero disputed markets, or buying 0.1c-2c optionality for a pre-final repricing exit.
 - Read `references/domain-adapters.md` when the market falls into politics/macro, crypto, or sports.
 - Read `references/research-and-open-source.md` when you need the research foundation or design rationale behind this skill.
